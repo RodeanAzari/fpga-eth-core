@@ -1,0 +1,2 @@
+cocotb==2.1.0
+tb-common @ git+https://github.com/RodeanAzari/tb-common.git@tb-common-v0.1

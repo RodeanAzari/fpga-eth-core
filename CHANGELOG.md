@@ -12,3 +12,4 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
     read pointer, read from the wrong address.
   - cocotb (`make sim`): 3 clock-ratio and backpressure scenarios at depth 16 and 2048,
     3,000 random words each, in order, full reached exactly at DEPTH.
+- Tests use `tb-common` at `tb-common-v0.1` (pinned in `requirements.txt`).

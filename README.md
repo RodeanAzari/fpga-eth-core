@@ -13,7 +13,8 @@ receiver (P3) and SerDes lab (P4) projects consume it as a git submodule at rele
 
 ## Build
 
-Requires Verilator ≥ 5.036, oss-cad-suite (Yosys and SymbiYosys), and Python with cocotb 2.1.
+Requires Verilator ≥ 5.036, oss-cad-suite (Yosys and SymbiYosys), and Python with
+`pip install -r requirements.txt` (cocotb 2.1, `tb-common` at a tag).
 
 ```
 make lint     # verilator -Wall, zero warnings

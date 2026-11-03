@@ -10,27 +10,19 @@ clock ratios, plus the high-water mark the overflow logic relies on.
 from __future__ import annotations
 
 import os
-import random
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge, Timer
+from tb_common import InOrderScoreboard, get_rng
+from tb_common.axis import AxisBeat, AxisSink, AxisSource
 
 DATA_W = int(os.environ.get("DATA_W", "8"))
 ADDR_W = int(os.environ.get("ADDR_W", "4"))
 DEPTH = 1 << ADDR_W
 
 
-def _rng(name: str) -> random.Random:
-    seed = int(os.environ.get("SEED", random.randrange(1 << 31)))
-    cocotb.log.info("%s: SEED=%d", name, seed)
-    return random.Random(seed)
-
-
 async def _reset(dut) -> None:
-    dut.s_tvalid_i.value = 0
-    dut.s_tdata_i.value = 0
-    dut.m_tready_i.value = 0
     dut.wr_rst_i.value = 1
     dut.rd_rst_i.value = 1
     await ClockCycles(dut.wr_clk_i, 4)
@@ -40,54 +32,37 @@ async def _reset(dut) -> None:
     await ClockCycles(dut.wr_clk_i, 2)
 
 
-async def _writer(dut, words: list[int], rng: random.Random, p_valid: float, stats: dict) -> None:
-    i = 0
-    while i < len(words):
+async def _track_hwm(dut, stats: dict) -> None:
+    while True:
         await RisingEdge(dut.wr_clk_i)
-        # Sample the handshake of the cycle that just ended.
-        if dut.s_tvalid_i.value == 1 and dut.s_tready_o.value == 1:
-            i += 1
         stats["hwm"] = max(stats["hwm"], int(dut.wr_level_o.value))
-        if i < len(words) and (dut.s_tvalid_i.value == 1 or rng.random() < p_valid):
-            # AXI-Stream: once valid, hold data until accepted.
-            dut.s_tvalid_i.value = 1
-            dut.s_tdata_i.value = words[i]
-        else:
-            dut.s_tvalid_i.value = 0
-    dut.s_tvalid_i.value = 0
-
-
-async def _reader(dut, n: int, rng: random.Random, p_ready: float) -> list[int]:
-    got: list[int] = []
-    while len(got) < n:
-        await RisingEdge(dut.rd_clk_i)
-        if dut.m_tvalid_o.value == 1 and dut.m_tready_i.value == 1:
-            got.append(int(dut.m_tdata_o.value))
-        dut.m_tready_i.value = 1 if rng.random() < p_ready else 0
-    dut.m_tready_i.value = 0
-    return got
 
 
 async def _run(dut, name: str, wr_ns: float, rd_ns: float, p_valid: float, p_ready: float,
                n: int = 3000) -> dict:
-    rng = _rng(name)
+    rng = get_rng(name)
     cocotb.start_soon(Clock(dut.wr_clk_i, wr_ns, unit="ns").start())
     await Timer(rng.randrange(100, int(rd_ns * 1000)), unit="ps")  # random clock phase
     cocotb.start_soon(Clock(dut.rd_clk_i, rd_ns, unit="ns").start())
+    src = AxisSource(dut, dut.wr_clk_i, "s_", rng=rng, p_valid=p_valid)
+    dut.m_tready_i.value = 0
     await _reset(dut)
-    words = [rng.randrange(1 << DATA_W) for _ in range(n)]
+    sb = InOrderScoreboard(name, fmt=lambda w: f"{w:#x}")
+    sink = AxisSink(dut, dut.rd_clk_i, "m_", rng=rng, p_ready=p_ready,
+                    callback=lambda f: sb.observe(f[0].data))  # no tlast: 1 beat/frame
     stats = {"hwm": 0}
-    w = cocotb.start_soon(_writer(dut, words, rng, p_valid, stats))
-    got = await _reader(dut, n, rng, p_ready)
-    await w
-    for k, (exp, act) in enumerate(zip(words, got, strict=True)):
-        assert act == exp, f"{name}: word {k}: expected {exp:#x}, got {act:#x}"
+    cocotb.start_soon(_track_hwm(dut, stats))
+    words = [rng.randrange(1 << DATA_W) for _ in range(n)]
+    for w in words:
+        sb.expect(w)
+    await src.send(AxisBeat(w) for w in words)
+    await sink.wait_frames(n)
     # Nothing extra may appear after the last word.
     await ClockCycles(dut.rd_clk_i, 10)
-    assert dut.m_tvalid_o.value == 0, f"{name}: spurious word after the stream ended"
+    sb.check_done()
+    assert sink.beats_seen == n, f"{name}: {sink.beats_seen - n} spurious word(s)"
     assert int(dut.wr_level_o.value) == 0
-    cocotb.log.info("%s: %d words in order, wr_level high-water mark %d/%d",
-                    name, n, stats["hwm"], DEPTH)
+    cocotb.log.info("%s: wr_level high-water mark %d/%d", name, stats["hwm"], DEPTH)
     return stats
 
 
