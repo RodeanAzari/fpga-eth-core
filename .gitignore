@@ -1,0 +1,7 @@
+build/
+formal/*_prove/
+formal/*_cover/
+__pycache__/
+*.log
+results.xml
+formal/*/status.sqlite

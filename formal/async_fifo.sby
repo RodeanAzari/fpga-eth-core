@@ -1,0 +1,22 @@
+[tasks]
+prove
+cover
+
+[options]
+prove: mode prove
+prove: depth 24
+cover: mode cover
+cover: depth 40
+multiclock on
+
+[engines]
+smtbmc bitwuzla
+
+[script]
+read -formal -sv async_fifo.sv
+read -formal -sv async_fifo_fv.sv
+prep -top async_fifo_fv
+
+[files]
+../rtl/async_fifo.sv
+async_fifo_fv.sv
