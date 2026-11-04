@@ -30,6 +30,18 @@ TESTS = {
         [{"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12}, {"FIFO_ADDR_W": 4, "BUF_ADDR_W": 11}],
     ),
     "test_udp_rx": ("udp_rx", ["rtl/udp_rx.sv"], [{}]),
+    "test_rx_stats": (
+        "rx_stats_top",
+        ["tb/models/MMCME2_BASE.sv", "tb/models/BUFG.sv", "tb/models/ODDR.sv",
+         "examples/rx_stats/xilinx/clk_gen.sv", "examples/rx_stats/reset_sync.sv",
+         "examples/rx_stats/uart_tx.sv", "examples/rx_stats/stats_report.sv",
+         "rtl/mii_rx.sv", "rtl/rx_ovf_guard.sv", "rtl/async_fifo.sv", "rtl/crc32_d8.sv",
+         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/eth_rx.sv", "rtl/udp_rx.sv",
+         "examples/rx_stats/rx_stats_top.sv"],
+        # Tiny timing so the sim is short: 4 clocks per UART bit, 3 ms report period.
+        [{"CLK_HZ": 1_000_000, "BAUD": 250_000, "REPORT_CYCLES": 300_000,
+          "PHY_RST_CYCLES": 100, "MAC_START_CYCLES": 400}],
+    ),
 }
 
 

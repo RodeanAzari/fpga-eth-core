@@ -38,4 +38,12 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
   frame: ok / filtered / ip_csum_err / malformed. cocotb: 1,618 frames judged by an
   independent RFC parser across 4 runtime configs with backpressure; planted bugs
   (checksum ignored, padding leak, 24-bit multicast mapping) each fail.
+- `examples/rx_stats`: Arty A7-100T receive harness (MMCM 125 MHz core + ODDR-forwarded
+  25 MHz PHY reference, reset sequencing, eth_rx + udp_rx, payload sequence check, 15
+  counters over UART once per second). cocotb: MII traffic in, UART line decoded and
+  every field checked (planted counter swap fails). Vivado 2025.2: timing met, WNS
+  +0.663 ns at 125 MHz, MII input setup +6.3 ns, 892 LUT / 1,710 FF / 2 BRAM36
+  (`docs/reports/rx_stats/`). Not yet run on hardware.
+- `async_fifo`: `rd_gray_q` declared before use (Vivado warning); XDC pointer filter
+  limited to sequential cells. Formal proof re-run: PASS.
 - Tests use `tb-common` at `tb-common-v0.1` (pinned in `requirements.txt`).

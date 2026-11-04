@@ -39,18 +39,22 @@ class MiiDriver:
     """Drives mii_rxd/rx_dv/rx_er on the falling edge, so they are stable at the
     rising edge where the DUT samples them (clause 22 receive timing)."""
 
-    def __init__(self, dut, clk) -> None:
-        self.dut = dut
+    def __init__(self, dut, clk, rxd=None, dv=None, er=None) -> None:
+        """rxd/dv/er: signal handles; default to the DUT's mii_rxd_i/mii_rx_dv_i/
+        mii_rx_er_i (block-level port names)."""
         self.clk = clk
-        dut.mii_rxd_i.value = 0
-        dut.mii_rx_dv_i.value = 0
-        dut.mii_rx_er_i.value = 0
+        self.rxd = rxd if rxd is not None else dut.mii_rxd_i
+        self.dv = dv if dv is not None else dut.mii_rx_dv_i
+        self.er = er if er is not None else dut.mii_rx_er_i
+        self.rxd.value = 0
+        self.dv.value = 0
+        self.er.value = 0
 
     async def _nibble(self, nib: int, dv: int, er: int = 0) -> None:
         await FallingEdge(self.clk)
-        self.dut.mii_rxd_i.value = nib
-        self.dut.mii_rx_dv_i.value = dv
-        self.dut.mii_rx_er_i.value = er
+        self.rxd.value = nib
+        self.dv.value = dv
+        self.er.value = er
 
     async def send(self, f: MiiFrame) -> None:
         for _ in range(f.preamble):

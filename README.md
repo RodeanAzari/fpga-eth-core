@@ -18,6 +18,9 @@ receiver (P3) and SerDes lab (P4) projects consume it as a git submodule at rele
 | Eth/IPv4/UDP RX filter, runtime group/port | `rtl/udp_rx.sv` | `make sim` vs. independent RFC parser |
 | **RX top:** MII → good frames in core domain | `rtl/eth_rx.sv` | `make sim`: MII-level frames, status accounting, forced overflow |
 
+Example design: [`examples/rx_stats`](examples/rx_stats/README.md), a non-ITCH Arty A7
+receive harness (UDP in, sequence check, counters over UART).
+
 ## Build
 
 Requires Verilator ≥ 5.036, oss-cad-suite (Yosys and SymbiYosys), and Python with
@@ -28,4 +31,5 @@ make lint     # verilator -Wall, zero warnings
 make formal   # SymbiYosys proofs
 make sim      # cocotb + Verilator
 make ci       # all of the above
+make example  # Vivado batch build of examples/rx_stats (local; run vivado-env first)
 ```

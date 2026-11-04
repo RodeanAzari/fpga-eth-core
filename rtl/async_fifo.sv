@@ -53,6 +53,8 @@ module async_fifo #(
     endfunction
 
     logic [DATA_W-1:0] mem [DEPTH];
+    logic [PTR_W-1:0]  rd_bin_q, rd_gray_q;  // read domain; declared here because the
+                                             // write domain synchronizes rd_gray_q
 
     // ---------------------------------------------------------------- write domain
     logic [PTR_W-1:0] wr_bin_q, wr_gray_q;
@@ -87,7 +89,6 @@ module async_fifo #(
     end
 
     // ----------------------------------------------------------------- read domain
-    logic [PTR_W-1:0] rd_bin_q, rd_gray_q;
     (* ASYNC_REG = "TRUE" *) logic [PTR_W-1:0] wr_gray_sync_q [SYNC_STAGES];
     logic [PTR_W-1:0] wr_bin_in_rd;
     logic             rd_empty, rd_fetch;
