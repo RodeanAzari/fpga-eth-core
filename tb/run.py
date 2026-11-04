@@ -29,6 +29,7 @@ TESTS = {
          "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/eth_rx.sv"],
         [{"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12}, {"FIFO_ADDR_W": 4, "BUF_ADDR_W": 11}],
     ),
+    "test_udp_rx": ("udp_rx", ["rtl/udp_rx.sv"], [{}]),
 }
 
 

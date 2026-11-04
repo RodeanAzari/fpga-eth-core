@@ -15,6 +15,7 @@ receiver (P3) and SerDes lab (P4) projects consume it as a git submodule at rele
 | FCS check + strip, frame status | `rtl/eth_fcs_check.sv` | `make sim` |
 | FIFO overflow guard (per-frame loss count) | `rtl/rx_ovf_guard.sv` | `make sim` (via `eth_rx`) |
 | Store-and-forward frame buffer | `rtl/frame_buffer.sv` | `make sim` (via `eth_rx`) |
+| Eth/IPv4/UDP RX filter, runtime group/port | `rtl/udp_rx.sv` | `make sim` vs. independent RFC parser |
 | **RX top:** MII → good frames in core domain | `rtl/eth_rx.sv` | `make sim`: MII-level frames, status accounting, forced overflow |
 
 ## Build

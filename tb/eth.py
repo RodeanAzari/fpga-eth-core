@@ -6,6 +6,8 @@ XOR 0xFFFFFFFF); the FCS goes on the wire least-significant byte first.
 
 from __future__ import annotations
 
+import random
+import struct
 import zlib
 from dataclasses import dataclass
 
@@ -64,3 +66,56 @@ class MiiDriver:
                 await self._nibble(n, 1, int(k == f.er_at))
         for _ in range(f.ifg):
             await self._nibble(0, 0)
+
+
+def ip_checksum(hdr: bytes) -> int:
+    """RFC 1071 ones'-complement checksum of an IPv4 header (checksum field zeroed)."""
+    s = sum(int.from_bytes(hdr[i:i + 2], "big") for i in range(0, len(hdr), 2))
+    while s >> 16:
+        s = (s & 0xFFFF) + (s >> 16)
+    return ~s & 0xFFFF
+
+
+def mcast_mac(ip: int) -> bytes:
+    """RFC 1112 s6.4: 01:00:5E + low 23 bits of the group address."""
+    return bytes([0x01, 0x00, 0x5E]) + (ip & 0x7FFFFF).to_bytes(3, "big")
+
+
+@dataclass
+class UdpFrame:
+    """An Ethernet II / IPv4 / UDP frame without FCS. Every field can be overridden to
+    build malformed or foreign frames; build() pads to the 60-byte Ethernet minimum."""
+    payload: bytes
+    dst_ip: int
+    dst_port: int
+    dst_mac: bytes | None = None   # default: multicast MAC of dst_ip
+    src_mac: bytes = bytes.fromhex("0200deadbeef")
+    src_ip: int = 0xC0A80A01       # 192.168.10.1
+    src_port: int = 40000
+    ethertype: int = 0x0800
+    version: int = 4
+    ihl: int = 5                   # options are filled with NOPs (0x01)
+    proto: int = 17
+    frag: int = 0x4000             # DF set, not a fragment
+    ip_totlen: int | None = None   # default: correct
+    udp_len: int | None = None     # default: correct
+    bad_csum: bool = False
+
+    def build(self) -> bytes:
+        udp_len = len(self.payload) + 8 if self.udp_len is None else self.udp_len
+        hl = max(self.ihl, 0) * 4
+        totlen = hl + len(self.payload) + 8 if self.ip_totlen is None else self.ip_totlen
+        hdr = bytearray(struct.pack(">BBHHHBBH4s4s", (self.version << 4) | (self.ihl & 0xF),
+                                    0, totlen & 0xFFFF, 0x1234, self.frag, 64, self.proto, 0,
+                                    self.src_ip.to_bytes(4, "big"),
+                                    self.dst_ip.to_bytes(4, "big")))
+        hdr += b"\x01" * max(hl - 20, 0)
+        csum = ip_checksum(bytes(hdr))
+        if self.bad_csum:
+            csum ^= 1 << random.Random(totlen).randrange(16)
+        hdr[10:12] = csum.to_bytes(2, "big")
+        udp = struct.pack(">HHHH", self.src_port, self.dst_port, udp_len & 0xFFFF, 0)
+        dst_mac = mcast_mac(self.dst_ip) if self.dst_mac is None else self.dst_mac
+        frame = dst_mac + self.src_mac + self.ethertype.to_bytes(2, "big") + bytes(hdr) \
+            + udp + self.payload
+        return frame + bytes(max(0, 60 - len(frame)))

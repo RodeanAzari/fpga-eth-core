@@ -31,4 +31,11 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
   nibbles, good frames byte-exact and in order, every status count exact; forced overflow:
   sent = delivered + lost, no corrupted frame delivered.
 - Planted bugs (guard undercounts lost frames; buffer releases bad frames) each fail.
+- `udp_rx`: Ethernet II / IPv4 / UDP filter with runtime `cfg_mac`/`cfg_ip`/`cfg_port`
+  (multicast MAC derived from the group per RFC 1112, or own MAC for unicast). IHL
+  options skipped, header checksum verified, fragments rejected, Ethernet padding
+  stripped by UDP length, sender MAC/IP/port latched for TX learning. One status per
+  frame: ok / filtered / ip_csum_err / malformed. cocotb: 1,618 frames judged by an
+  independent RFC parser across 4 runtime configs with backpressure; planted bugs
+  (checksum ignored, padding leak, 24-bit multicast mapping) each fail.
 - Tests use `tb-common` at `tb-common-v0.1` (pinned in `requirements.txt`).
