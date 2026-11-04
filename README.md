@@ -10,6 +10,9 @@ receiver (P3) and SerDes lab (P4) projects consume it as a git submodule at rele
 | Block | File | Verified by |
 |---|---|---|
 | Async FIFO (Gray pointers) | `rtl/async_fifo.sv` | `make formal` (k-induction), `make sim` |
+| MII RX (nibble→byte, SFD, T0 pulse) | `rtl/mii_rx.sv` | `make sim` |
+| CRC-32 byte update | `rtl/crc32_d8.sv` | `make sim` (via FCS check, zlib reference) |
+| FCS check + strip, frame status | `rtl/eth_fcs_check.sv` | `make sim` |
 
 ## Build
 

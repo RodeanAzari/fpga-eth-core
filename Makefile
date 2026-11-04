@@ -8,7 +8,7 @@ RTL := $(wildcard rtl/*.sv)
 
 lint:
 	@for f in $(RTL); do \
-	  verilator --lint-only -Wall --assert $$f --top-module $$(basename $$f .sv) || exit 1; \
+	  verilator --lint-only -Wall --assert $(RTL) --top-module $$(basename $$f .sv) || exit 1; \
 	done
 
 formal:

@@ -17,6 +17,12 @@ TESTS = {
         ["rtl/async_fifo.sv"],
         [{"DATA_W": 8, "ADDR_W": 4}, {"DATA_W": 8, "ADDR_W": 11}],
     ),
+    "test_mii_rx": ("mii_rx", ["rtl/mii_rx.sv"], [{}]),
+    "test_eth_fcs_check": (
+        "eth_fcs_check",
+        ["rtl/crc32_d8.sv", "rtl/eth_fcs_check.sv"],
+        [{}],
+    ),
 }
 
 
@@ -25,7 +31,7 @@ def main(names: list[str]) -> int:
     for name in names or list(TESTS):
         top, srcs, param_sets = TESTS[name]
         for params in param_sets:
-            tag = "_".join(f"{k}{v}" for k, v in params.items())
+            tag = "_".join(f"{k}{v}" for k, v in params.items()) or "default"
             build_dir = ROOT / "build" / "sim" / f"{name}_{tag}"
             runner = get_runner("verilator")
             runner.build(
