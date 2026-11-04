@@ -20,4 +20,15 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
   status pulse per frame (ok / crc_err / rx_err / runt < 64 B). cocotb: 400 mixed frames
   at full rate and under random backpressure, plus boundary lengths (1-5, 63, 64, 1518 B).
 - Planted bugs (reversed nibble order; wrong CRC residue) fail all 6 new tests.
+- `rx_ovf_guard`: MII-domain guard in front of the async FIFO. A frame that loses a byte is
+  discarded; an abort beat (tlast, tuser[1], tdata = frames lost) then reaches the core
+  domain, so overflow is counted per frame, never silent.
+- `frame_buffer`: store-and-forward; releases a frame only after a good tlast verdict,
+  rewinds on bad, drops oversize (> MAX_FRAME) frames without deadlock.
+- `eth_rx`: top of the RX path (mii_rx -> guard -> async FIFO -> FCS check -> buffer).
+  Exactly one status pulse per frame with an SFD: ok / crc_err / rx_err / runt / oversize
+  / ovf (+ lost-frame count). cocotb at FIFO depth 2048 and 16: 400 mixed frames from MII
+  nibbles, good frames byte-exact and in order, every status count exact; forced overflow:
+  sent = delivered + lost, no corrupted frame delivered.
+- Planted bugs (guard undercounts lost frames; buffer releases bad frames) each fail.
 - Tests use `tb-common` at `tb-common-v0.1` (pinned in `requirements.txt`).

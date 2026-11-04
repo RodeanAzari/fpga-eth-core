@@ -23,6 +23,12 @@ TESTS = {
         ["rtl/crc32_d8.sv", "rtl/eth_fcs_check.sv"],
         [{}],
     ),
+    "test_eth_rx": (
+        "eth_rx",
+        ["rtl/mii_rx.sv", "rtl/rx_ovf_guard.sv", "rtl/async_fifo.sv", "rtl/crc32_d8.sv",
+         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/eth_rx.sv"],
+        [{"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12}, {"FIFO_ADDR_W": 4, "BUF_ADDR_W": 11}],
+    ),
 }
 
 
