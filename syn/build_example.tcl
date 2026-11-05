@@ -1,7 +1,7 @@
-# Batch build of examples/rx_stats for the Arty A7-100T:
-#   vivado -mode batch -source syn/build_rx_stats.tcl [-tclargs <part>]
+# Batch build of an example design for the Arty A7-100T:
+#   vivado -mode batch -source syn/build_example.tcl -tclargs <rx_stats|udp_echo> [<part>]
 # Non-project flow; nothing but build/ is written, except the reports copied to
-# docs/reports/rx_stats/ for committing. The bitstream is written only if every timing
+# docs/reports/<example>/ for committing. The bitstream is written only if every timing
 # path meets and no clock-domain crossing is unconstrained.
 
 set expected_vivado 2025.2
@@ -9,22 +9,41 @@ if {[version -short] ne $expected_vivado} {
     puts "WARNING: Vivado [version -short], pinned version is $expected_vivado (docs: README)"
 }
 
-set part [lindex $argv 0]
+set example [lindex $argv 0]
+set part    [lindex $argv 1]
 if {$part eq ""} { set part xc7a100tcsg324-1 }
-set top     rx_stats_top
 set repo    [file normalize [file join [file dirname [info script]] ..]]
-set rundir  [file join $repo build rx_stats]
-set reports [file join $repo docs reports rx_stats]
+# Per example: top module, extra source globs (beyond rtl/ and the shared rx_stats
+# helpers), and constraint files read before async_fifo.xdc.
+set ex [file join $repo examples]
+set c  [file join $repo constr]
+switch -- $example {
+    rx_stats {
+        set top   rx_stats_top
+        set srcs  {}
+        set xdcs  [list [file join $c arty_a7_100_pins.xdc] [file join $c rx_stats_timing.xdc]]
+    }
+    udp_echo {
+        set top   udp_echo_top
+        set srcs  [glob [file join $ex udp_echo *.sv]]
+        set xdcs  [list [file join $c arty_a7_100_pins.xdc] [file join $c arty_a7_100_pins_tx.xdc] \
+                       [file join $c udp_echo_timing.xdc]]
+    }
+    default { error "unknown example '$example' (rx_stats | udp_echo)" }
+}
+set rundir  [file join $repo build $example]
+set reports [file join $repo docs reports $example]
 file mkdir $rundir $reports
 cd $rundir
 
 set sv [concat \
     [lsort [glob [file join $repo rtl *.sv]]] \
-    [lsort [glob [file join $repo examples rx_stats *.sv]]] \
-    [lsort [glob [file join $repo examples rx_stats xilinx *.sv]]]]
+    [lsort [lsearch -all -inline -not [glob [file join $repo examples rx_stats *.sv]] \
+        [expr {$example eq "rx_stats" ? "" : "*rx_stats_top.sv"}]]] \
+    [lsort [glob [file join $repo examples rx_stats xilinx *.sv]]] \
+    [lsort $srcs]]
 read_verilog -sv $sv
-read_xdc [file join $repo constr arty_a7_100_pins.xdc]
-read_xdc [file join $repo constr rx_stats_timing.xdc]
+foreach x $xdcs { read_xdc $x }
 read_xdc -ref async_fifo [file join $repo constr async_fifo.xdc]
 
 synth_design -top $top -part $part

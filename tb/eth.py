@@ -123,3 +123,52 @@ class UdpFrame:
         frame = dst_mac + self.src_mac + self.ethertype.to_bytes(2, "big") + bytes(hdr) \
             + udp + self.payload
         return frame + bytes(max(0, 60 - len(frame)))
+
+
+@dataclass
+class TxWireFrame:
+    """One tx_en burst as seen on the MII transmit pins."""
+    nibbles: list[int]   # every nibble while tx_en was high, preamble included
+    idle_before: int     # tx_en-low clocks before this burst (None-like -1 for the first)
+
+    def decode(self) -> tuple[bytes, bool]:
+        """(bytes after the SFD, framing ok). Framing ok = exactly 15 preamble nibbles of
+        0x5, then the SFD's 0xD, then an even number of nibbles (low nibble first)."""
+        pre = PREAMBLE_NIBBLES
+        ok = (len(self.nibbles) > pre and self.nibbles[:pre] == [0x5] * pre
+              and self.nibbles[pre] == 0xD and (len(self.nibbles) - pre - 1) % 2 == 0)
+        body = self.nibbles[pre + 1:]
+        data = bytes(body[i] | (body[i + 1] << 4) for i in range(0, len(body) - 1, 2))
+        return data, ok
+
+
+class MiiTxMonitor:
+    """Samples mii_txd/tx_en on the falling edge of tx_clk (the DUT drives them from
+    rising-edge flops, so they are settled mid-cycle) and collects one TxWireFrame per
+    tx_en burst."""
+
+    def __init__(self, clk, txd, tx_en) -> None:
+        self.clk, self.txd, self.tx_en = clk, txd, tx_en
+        self.frames: list[TxWireFrame] = []
+
+    async def run(self) -> None:
+        cur: list[int] | None = None
+        idle = -1  # unknown before the first frame
+        while True:
+            await FallingEdge(self.clk)
+            if int(self.tx_en.value):
+                if cur is None:
+                    cur = []
+                cur.append(int(self.txd.value))
+            else:
+                if cur is not None:
+                    self.frames.append(TxWireFrame(cur, idle))
+                    cur, idle = None, 0
+                if idle >= 0:
+                    idle += 1
+
+
+def wire_image(frame: bytes, min_data: int = 60) -> bytes:
+    """What a correct MAC puts after the SFD for `frame`: zero padding to min_data
+    bytes, then the FCS."""
+    return with_fcs(frame + bytes(max(0, min_data - len(frame))))

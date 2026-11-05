@@ -14,3 +14,4 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 add_executable(udp_seq_send udp_seq_send.cpp)
+add_executable(udp_echo_check udp_echo_check.cpp)
