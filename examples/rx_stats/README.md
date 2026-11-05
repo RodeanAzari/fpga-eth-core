@@ -15,6 +15,17 @@ PHY MII ─▶ eth_rx ─▶ udp_rx ─▶ sequence check + counters ─▶ stat
 
 UDP to 239.1.1.1:26400 (parameters `GROUP_IP`, `UDP_PORT`). Payload bytes 0–7 are a
 big-endian sequence number that increases by 1 per datagram; the rest is arbitrary.
+`host/udp_seq_send` produces exactly this:
+
+```
+make host
+build/host/udp_seq_send --dst 239.1.1.1 --port 26400 --if-ip <host IP on the cable> \
+    --size 1472 --pps 8000 --seconds 600 > run.txt
+```
+
+The FPGA takes the first datagram after reset as its sequence baseline, so press RESET
+before each run. At 1,472-byte payloads one datagram is 1,538 bytes on the wire, so
+100 Mbit/s carries at most 8,127 datagrams/s.
 
 ## UART output (115200 8N1, one line per second)
 

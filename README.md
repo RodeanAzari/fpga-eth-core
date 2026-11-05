@@ -30,6 +30,7 @@ Requires Verilator ≥ 5.036, oss-cad-suite (Yosys and SymbiYosys), and Python w
 make lint     # verilator -Wall, zero warnings
 make formal   # SymbiYosys proofs
 make sim      # cocotb + Verilator
+make host-test # host/udp_seq_send (C++20, CMake), loopback check of every datagram
 make ci       # all of the above
 make example  # Vivado batch build of examples/rx_stats (local; run vivado-env first)
 ```

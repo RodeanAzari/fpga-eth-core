@@ -47,3 +47,8 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
 - `async_fifo`: `rd_gray_q` declared before use (Vivado warning); XDC pointer filter
   limited to sequential cells. Formal proof re-run: PASS.
 - Tests use `tb-common` at `tb-common-v0.1` (pinned in `requirements.txt`).
+- `host/udp_seq_send` (C++20): paced UDP sender with a big-endian 64-bit sequence number
+  per datagram (the rx_stats payload contract); retries host queue-full with the same
+  sequence number; key=value summary for results sidecars. `make host-test`: 20,000
+  datagrams over loopback, every one checked; fails on planted little-endian encoding
+  and a 32-bit counter.

@@ -6,7 +6,7 @@ RTL := $(wildcard rtl/*.sv)
 # Example design: Xilinx primitives come from tb/models/ stand-ins for lint and sim only.
 EX_RX := $(wildcard examples/rx_stats/*.sv examples/rx_stats/xilinx/*.sv) $(wildcard tb/models/*.sv)
 
-.PHONY: lint formal sim ci example clean
+.PHONY: lint formal sim host host-test ci example clean
 
 lint:
 	@for f in $(RTL); do \
@@ -20,7 +20,15 @@ formal:
 sim:
 	$(PY) tb/run.py
 
-ci: lint formal sim
+# Host tools (C++20). host-test sends over loopback and checks every datagram.
+host:
+	cmake -S host -B build/host -DCMAKE_BUILD_TYPE=Release
+	cmake --build build/host
+
+host-test: host
+	$(PY) host/test_udp_seq_send.py build/host/udp_seq_send
+
+ci: lint formal sim host-test
 
 # Vivado batch build of examples/rx_stats (local only; needs vivado-env). Reports land in
 # docs/reports/rx_stats/; no bitstream unless timing is met and CDC is clean.
