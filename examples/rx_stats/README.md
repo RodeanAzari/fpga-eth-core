@@ -19,9 +19,14 @@ big-endian sequence number that increases by 1 per datagram; the rest is arbitra
 
 ```
 make host
-build/host/udp_seq_send --dst 239.1.1.1 --port 26400 --if-ip <host IP on the cable> \
+taskset -c 2 build/host/udp_seq_send --dst 239.1.1.1 --port 26400 --if-ip <host IP on the cable> \
     --size 1472 --pps 8000 --seconds 600 > run.txt
 ```
+
+`taskset` pins the sender to one CPU. If the sending thread migrates, a multi-queue
+NIC can put consecutive datagrams on different queues and reorder them on the wire.
+Loopback on this host reorders a few per 20,000 for the same reason (see
+`host/test_udp_seq_send.py`).
 
 The FPGA takes the first datagram after reset as its sequence baseline, so press RESET
 before each run. At 1,472-byte payloads one datagram is 1,538 bytes on the wire, so
@@ -83,7 +88,7 @@ From `make example` with Vivado 2025.2, xc7a100tcsg324-1, 125 MHz core clock:
 
 | | Value | Source |
 |---|---|---|
-| Timing | WNS +0.663 ns (core), WHS +0.035 ns, all constraints met | [timing_summary.rpt](../../docs/reports/rx_stats/timing_summary.rpt) |
+| Timing | WNS +0.348 ns (core), WHS +0.042 ns, all constraints met (rebuilt 2026-11-05 after the `async_fifo` BRAM/DONT_TOUCH change; was +0.663 ns) | [timing_summary.rpt](../../docs/reports/rx_stats/timing_summary.rpt) |
 | Worst path | `udp_rx` verdict logic (`ip_totlen_q` → `ip_csum_err_o`) | same |
 | MII input setup margin | +6.299 ns (DP83848 T2.5.2: RX_CLK→data 10–30 ns) | same |
 | Utilization (whole example) | 892 LUT, 1,710 FF, 2 BRAM36 tiles, 1 MMCM, 3 BUFG | [utilization.rpt](../../docs/reports/rx_stats/utilization.rpt) |

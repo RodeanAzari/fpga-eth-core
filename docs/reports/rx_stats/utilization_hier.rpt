@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2025.2 (lin64) Build 6299465 Fri Nov 14 12:34:56 MST 2025
-| Date         : Wed Nov  4 14:44:19 2026
+| Date         : Thu Nov  5 11:48:04 2026
 | Host         : RodeanStation running 64-bit Ubuntu 26.04 LTS
 | Command      : report_utilization -hierarchical -file /home/rodea/fpga-eth-core/docs/reports/rx_stats/utilization_hier.rpt
 | Design       : rx_stats_top
@@ -24,12 +24,12 @@ Table of Contents
 +------------------+---------------+------------+------------+---------+------+------+--------+--------+------------+
 | rx_stats_top     |         (top) |        892 |        888 |       0 |    4 | 1710 |      2 |      0 |          0 |
 |   (rx_stats_top) |         (top) |        172 |        172 |       0 |    0 |  671 |      0 |      0 |          0 |
-|   u_eth_rx       |        eth_rx |        236 |        232 |       0 |    4 |  273 |      2 |      0 |          0 |
+|   u_eth_rx       |        eth_rx |        237 |        233 |       0 |    4 |  273 |      2 |      0 |          0 |
 |     u_fifo       |    async_fifo |         56 |         56 |       0 |    0 |  108 |      1 |      0 |          0 |
 |     u_buf        |  frame_buffer |         64 |         64 |       0 |    0 |   66 |      1 |      0 |          0 |
-|     u_fcs        | eth_fcs_check |         71 |         67 |       0 |    4 |   53 |      0 |      0 |          0 |
+|     u_fcs        | eth_fcs_check |         72 |         68 |       0 |    4 |   53 |      0 |      0 |          0 |
 |   u_report       |  stats_report |        189 |        189 |       0 |    0 |  474 |      0 |      0 |          0 |
-|   u_udp_rx       |        udp_rx |        256 |        256 |       0 |    0 |  261 |      0 |      0 |          0 |
+|   u_udp_rx       |        udp_rx |        255 |        255 |       0 |    0 |  261 |      0 |      0 |          0 |
 +------------------+---------------+------------+------------+---------+------+------+--------+--------+------------+
 * Note: The sum of lower-level cells may be larger than their parent cells total, due to cross-hierarchy LUT combining
 

@@ -52,3 +52,62 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
   sequence number; key=value summary for results sidecars. `make host-test`: 20,000
   datagrams over loopback, every one checked; fails on planted little-endian encoding
   and a 32-bit counter.
+- **TX path (toward eth-core-v0.2).**
+  - `mii_tx`: preamble/SFD, low nibble first, zero padding to 60 bytes, FCS, and exactly
+    24 idle nibbles between back-to-back frames. The MII cannot stall, so an underrun
+    ends the frame with a deliberately wrong FCS and pulses `underrun_o`. A truncated
+    frame never goes out with a valid FCS.
+  - `eth_tx`: core-domain frames → async FIFO → `mii_tx`. The underrun pulse returns to
+    the core domain through a toggle synchronizer.
+  - `udp_tx`: generic UDP payload in (AXI-Stream, tlast), Ethernet/IPv4/UDP frame out.
+    The payload is buffered store-and-forward and its **length is counted from tlast**,
+    so there is no length input (decided 2026-11-05: simpler for every consumer, and
+    no length/tlast mismatch is possible). Destination MAC/IP/port and source port are
+    sampled with the first beat; wire them to `udp_rx`'s `src_*` outputs to reply to a
+    learned host. RFC 791 header checksum, DF set, ID 0, UDP checksum 0. `s_tuser` on
+    tlast discards the payload; oversize (> 1,472 B) is dropped and counted.
+  - cocotb:
+    - `mii_tx`: 300 back-to-back frames of 1–1,514 B byte-exact against a zlib/padding
+      image, IFG exactly 24. In the underrun test (80 frames), every starved frame went
+      out with a bad FCS, `underrun_o` matched the spoiled count, and the following
+      frames were perfect.
+    - `udp_tx`: 539 frames parsed by an independent RFC reader with full-rate and
+      backpressured input and output. Destination inputs are scrambled after the first
+      beat, and directed cases exercise the checksum's second end-around carry.
+      Sending is gapless (1 byte/cycle), oversize and discard are counted correctly.
+  - 8 planted bugs each fail a test: high nibble first, IFG one short, FCS not spoiled
+    on underrun, padding to 59, destination sampled at tlast, single-fold checksum, UDP
+    length off by one, oversize not counted.
+- `examples/udp_echo`: the second non-ITCH example and the v0.2 hardware harness. It
+  echoes each datagram to the sender's learned MAC/IP/port and prints 15 counters over
+  UART. cocotb end to end, MII pins to MII pins: 120 echoes of 1–1,472 B byte-exact to 4
+  rotating senders; foreign and bad-FCS frames are not echoed; the UART counters are exact.
+- `host/udp_echo_check` (C++20): paced sender of random-length (1–1,472 B) payloads,
+  each regenerable from its index. Every echo is matched byte for byte; the summary
+  reports lost / mismatched / reordered. `make host-test`: loopback against a Python
+  echo server; an injected drop and an injected corruption are reported exactly.
+- Build: `syn/build_example.tcl <rx_stats|udp_echo>` replaces `syn/build_rx_stats.tcl`;
+  `make example-echo`. The `eth_tx_clk` pin is in `constr/arty_a7_100_pins_tx.xdc`
+  (from the Digilent master XDC). MII TX output delays come from DP83848 SNLS250E
+  T2.4.2/T2.4.3.
+- `async_fifo`: the memory is now always block RAM (`ram_style = "block"`), and the Gray
+  pointer registers are `DONT_TOUCH`. Found in the first `udp_echo` build, where
+  `report_clock_interaction` flagged the core ↔ tx_clk crossings as "unsafe":
+  - The 64-deep TX FIFO had mapped to distributed RAM. Its asynchronous read made the
+    memory itself a fabric crossing (write clock → `m_tdata_o`), which only the Gray
+    pointers' constraint was meant to cover.
+  - Synthesis had merged `wr_gray_q[MSB]` into its equal `wr_bin_q[MSB]`, so the
+    `*wr_gray_q_reg*` max-delay missed that bit and it was timed as a synchronous path.
+    The RX FIFO escaped only because the merge happened to keep the Gray name.
+  - With both changes, the Gray pointers are the only crossing in every instance, and
+    `constr/async_fifo.xdc` is unchanged. Cost: at least one BRAM18 per FIFO. `eth_tx`'s
+    FIFO default goes from 64 to 2,048 deep (one BRAM18 at 9 bits, a whole frame).
+    Formal proof re-run. Vivado 2025.2: `udp_echo` WNS +0.312 ns at 125 MHz, MII TX
+    output setup +20.645 ns, 1,119 LUT / 2,367 FF / 3 BRAM36, 0 critical warnings, every
+    crossing "Max Delay Datapath Only" (`docs/reports/udp_echo/`). `rx_stats` rebuilt:
+    WNS +0.348 ns (`docs/reports/rx_stats/`). Not yet run on hardware.
+- `host/test_udp_seq_send.py`: checks each sequence number arrives once and the set is
+  contiguous, instead of strict arrival order. WSL2 loopback reorders a few datagrams per
+  20,000 (4 of 5 runs failed on 2026-11-05 with every datagram present). The planted
+  little-endian and 32-bit-counter bugs still fail it. The hardware gate commands now pin
+  the sender with `taskset`, so a multi-queue NIC cannot reorder on the wire.

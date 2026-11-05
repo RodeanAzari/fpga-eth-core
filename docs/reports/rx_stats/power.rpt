@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 -------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version     : Vivado v.2025.2 (lin64) Build 6299465 Fri Nov 14 12:34:56 MST 2025
-| Date             : Wed Nov  4 14:44:24 2026
+| Date             : Thu Nov  5 11:48:11 2026
 | Host             : RodeanStation running 64-bit Ubuntu 26.04 LTS
 | Command          : report_power -file /home/rodea/fpga-eth-core/docs/reports/rx_stats/power.rpt
 | Design           : rx_stats_top
@@ -54,13 +54,13 @@ Table of Contents
 +-------------------------+-----------+----------+-----------+-----------------+
 | Clocks                  |     0.006 |        8 |       --- |             --- |
 | Slice Logic             |     0.001 |     3109 |       --- |             --- |
-|   CARRY4                |    <0.001 |      241 |     15850 |            1.52 |
 |   LUT as Logic          |    <0.001 |      888 |     63400 |            1.40 |
+|   CARRY4                |    <0.001 |      241 |     15850 |            1.52 |
 |   Register              |    <0.001 |     1710 |    126800 |            1.35 |
 |   Others                |     0.000 |       36 |       --- |             --- |
 |   LUT as Shift Register |     0.000 |        4 |     19000 |            0.02 |
 |   F7/F8 Muxes           |     0.000 |       47 |     63400 |            0.07 |
-| Signals                 |    <0.001 |     2635 |       --- |             --- |
+| Signals                 |    <0.001 |     2637 |       --- |             --- |
 | Block RAM               |     0.005 |        2 |       135 |            1.48 |
 | MMCM                    |     0.106 |        1 |         6 |           16.67 |
 | I/O                     |     0.005 |       22 |       210 |           10.48 |

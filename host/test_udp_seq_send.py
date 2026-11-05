@@ -5,6 +5,13 @@ sender says it sent. If the sender skipped or repeated a sequence number, encode
 little-endian, sent the wrong size, or miscounted, the FPGA would report a false drop
 (or hide a real one). This test receives on 127.0.0.1 and checks every datagram.
 
+Loopback does not preserve order: on this host (WSL2) datagrams are reordered a few
+times per 20,000 (the sending thread's CPU changes, and each CPU has its own backlog
+queue). So the test checks what the sender controls: every sequence number arrives
+exactly once and they form the contiguous range, in big-endian. Order is reported, not
+asserted. On the real link, pin the sender to one CPU (taskset) so a multi-queue NIC
+cannot reorder either.
+
 Usage: python3 host/test_udp_seq_send.py <path to udp_seq_send>
 """
 
@@ -46,13 +53,16 @@ def main() -> int:
     assert proc.returncode == 0, f"exit code {proc.returncode}"
     assert len(seqs) == COUNT, f"received {len(seqs)} of {COUNT}"
     want = [(START + i) % 2**64 for i in range(COUNT)]
-    first_bad = next((i for i, (g, w) in enumerate(zip(seqs, want)) if g != w), None)
-    assert first_bad is None, f"seq[{first_bad}] = {seqs[first_bad]:#x}, want {want[first_bad]:#x}"
+    got = sorted(seqs, key=lambda x: (x - START) % 2**64)  # order from START, across the wrap
+    first_bad = next((i for i, (g, w) in enumerate(zip(got, want)) if g != w), None)
+    assert first_bad is None, f"sorted seq[{first_bad}] = {got[first_bad]:#x}, want {want[first_bad]:#x}"
+    reordered = sum(1 for a, b in zip(seqs, seqs[1:]) if (b - a) % 2**64 > 2**63)
     assert int(summary["sent"]) == COUNT, summary
     assert int(summary["first_seq"]) == START, summary
     assert int(summary["last_seq"]) == want[-1], summary
-    print(f"PASS: {COUNT} datagrams, contiguous big-endian sequence, summary matches; "
-          f"achieved {summary['achieved_pps']} pps")
+    print(f"PASS: {COUNT} datagrams, each sequence number once, contiguous, big-endian; "
+          f"summary matches; achieved {summary['achieved_pps']} pps; "
+          f"{reordered} reordered by loopback")
     return 0
 
 

@@ -1,4 +1,4 @@
 vivado 2025.2  part xc7a100tcsg324-1  top rx_stats_top
 core clock period 8.000 ns
-WNS 0.663 ns  WHS 0.035 ns
+WNS 0.348 ns  WHS 0.042 ns
 Fmax core (1/(period - WNS)), only if the core path is the worst: see timing_summary.rpt

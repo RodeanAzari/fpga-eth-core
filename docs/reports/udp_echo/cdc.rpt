@@ -1,0 +1,62 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.2 (lin64) Build 6299465 Fri Nov 14 12:34:56 MST 2025
+| Date         : Thu Nov  5 11:45:06 2026
+| Host         : RodeanStation running 64-bit Ubuntu 26.04 LTS
+| Command      : report_cdc -details -file /home/rodea/fpga-eth-core/docs/reports/udp_echo/cdc.rpt
+| Design       : udp_echo_top
+| Device       : 7a100t-csg324
+| Speed File   : -1  PRODUCTION 1.23 2018-06-13
+| Design State : Routed
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+CDC Report
+
+ID     Severity  Count  Description
+-----  --------  -----  ----------------------------------------------
+CDC-3  Info          4  1-bit synchronized with ASYNC_REG property
+CDC-6  Warning       4  Multi-bit synchronized with ASYNC_REG property
+
+Source Clock: eth_rx_clk
+Destination Clock: core_unbuf
+CDC Type: No Common Primary Clock
+
+Row  ID     Severity  Description                                     Depth  Exception                Source (From)                          Destination (To)
+---  -----  --------  ----------------------------------------------  -----  -----------------------  -------------------------------------  ---------------------------------------------
+  1  CDC-6  Warning   Multi-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  u_eth_rx/u_fifo/wr_gray_q_reg[11:0]/C  u_eth_rx/u_fifo/wr_gray_sync_q_reg[0][11:0]/D
+
+Source Clock: eth_tx_clk
+Destination Clock: core_unbuf
+CDC Type: No Common Primary Clock
+
+Row  ID     Severity  Description                                     Depth  Exception                Source (From)                          Destination (To)
+---  -----  --------  ----------------------------------------------  -----  -----------------------  -------------------------------------  ---------------------------------------------
+  1  CDC-6  Warning   Multi-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  u_eth_tx/u_fifo/rd_gray_q_reg[11:0]/C  u_eth_tx/u_fifo/rd_gray_sync_q_reg[0][11:0]/D
+  2  CDC-3  Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  u_eth_tx/underrun_tgl_q_reg/C          u_eth_tx/underrun_sync_q_reg[0]/D
+
+Source Clock: input port clock
+Destination Clock: core_unbuf
+CDC Type: No Common Primary Clock
+
+Row  ID     Severity  Description                                 Depth  Exception   Source (From)  Destination (To)
+---  -----  --------  ------------------------------------------  -----  ----------  -------------  --------------------------
+  1  CDC-3  Info      1-bit synchronized with ASYNC_REG property      3  False Path  ck_rst         u_rst_core/sync_q_reg[0]/D
+
+Source Clock: core_unbuf
+Destination Clock: eth_rx_clk
+CDC Type: No Common Primary Clock
+
+Row  ID     Severity  Description                                     Depth  Exception                Source (From)                          Destination (To)
+---  -----  --------  ----------------------------------------------  -----  -----------------------  -------------------------------------  ---------------------------------------------
+  1  CDC-6  Warning   Multi-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  u_eth_rx/u_fifo/rd_gray_q_reg[11:0]/C  u_eth_rx/u_fifo/rd_gray_sync_q_reg[0][11:0]/D
+  2  CDC-3  Info      1-bit synchronized with ASYNC_REG property          3  False Path               mac_rst_q_reg/C                        u_rst_mii_rx/sync_q_reg[0]/D
+
+Source Clock: core_unbuf
+Destination Clock: eth_tx_clk
+CDC Type: No Common Primary Clock
+
+Row  ID     Severity  Description                                     Depth  Exception                Source (From)                          Destination (To)
+---  -----  --------  ----------------------------------------------  -----  -----------------------  -------------------------------------  ---------------------------------------------
+  1  CDC-6  Warning   Multi-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  u_eth_tx/u_fifo/wr_gray_q_reg[11:0]/C  u_eth_tx/u_fifo/wr_gray_sync_q_reg[0][11:0]/D
+  2  CDC-3  Info      1-bit synchronized with ASYNC_REG property          3  False Path               mac_rst_q_reg/C                        u_rst_mii_tx/sync_q_reg[0]/D
+

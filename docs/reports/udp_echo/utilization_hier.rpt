@@ -1,0 +1,40 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.2 (lin64) Build 6299465 Fri Nov 14 12:34:56 MST 2025
+| Date         : Thu Nov  5 11:45:06 2026
+| Host         : RodeanStation running 64-bit Ubuntu 26.04 LTS
+| Command      : report_utilization -hierarchical -file /home/rodea/fpga-eth-core/docs/reports/udp_echo/utilization_hier.rpt
+| Design       : udp_echo_top
+| Device       : xc7a100tcsg324-1
+| Speed File   : -1
+| Design State : Routed
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++------------------+----------------------------+------------+------------+---------+------+------+--------+--------+------------+
+|     Instance     |           Module           | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs | RAMB36 | RAMB18 | DSP Blocks |
++------------------+----------------------------+------------+------------+---------+------+------+--------+--------+------------+
+| udp_echo_top     |                      (top) |       1119 |       1101 |       0 |   18 | 2367 |      2 |      2 |          0 |
+|   (udp_echo_top) |                      (top) |         57 |         57 |       0 |    0 |  536 |      0 |      0 |          0 |
+|   u_eth_rx       |                     eth_rx |        235 |        231 |       0 |    4 |  273 |      2 |      0 |          0 |
+|     u_fifo       |                 async_fifo |         56 |         56 |       0 |    0 |  108 |      1 |      0 |          0 |
+|     u_buf        |               frame_buffer |         67 |         67 |       0 |    0 |   66 |      1 |      0 |          0 |
+|     u_fcs        |              eth_fcs_check |         67 |         63 |       0 |    4 |   53 |      0 |      0 |          0 |
+|   u_eth_tx       |                     eth_tx |        130 |        130 |       0 |    0 |  168 |      0 |      1 |          0 |
+|     u_mii_tx     |                     mii_tx |         85 |         85 |       0 |    0 |   55 |      0 |      0 |          0 |
+|     u_fifo       | async_fifo__parameterized0 |         42 |         42 |       0 |    0 |  108 |      0 |      1 |          0 |
+|   u_report       |               stats_report |        174 |        174 |       0 |    0 |  474 |      0 |      0 |          0 |
+|   u_udp_rx       |                     udp_rx |        216 |        216 |       0 |    0 |  453 |      0 |      0 |          0 |
+|   u_udp_tx       |                     udp_tx |        277 |        263 |       0 |   14 |  429 |      0 |      1 |          0 |
++------------------+----------------------------+------------+------------+---------+------+------+--------+--------+------------+
+* Note: The sum of lower-level cells may be larger than their parent cells total, due to cross-hierarchy LUT combining
+
+

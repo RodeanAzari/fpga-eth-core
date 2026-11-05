@@ -3,7 +3,8 @@
 //
 // Write side: AXI-Stream sink in wr_clk_i. s_tready_o is low only when full.
 // Read side:  AXI-Stream source in rd_clk_i, first-word-fall-through. The memory has a
-//             synchronous read (infers BRAM / registered LUTRAM) that feeds m_tdata_o.
+//             synchronous read that feeds m_tdata_o; it is always block RAM (ram_style),
+//             so the minimum cost is one BRAM18 (e.g. 2048 x 9 or 1024 x 18).
 //
 // Latency: a word written on wr_clk edge N is visible on m_tvalid_o after the write
 // pointer crosses SYNC_STAGES rd_clk flops plus one fetch cycle: SYNC_STAGES + 1 rd_clk
@@ -52,12 +53,20 @@ module async_fifo #(
         for (int i = PTR_W - 2; i >= 0; i--) gray2bin[i] = gray2bin[i+1] ^ g[i];
     endfunction
 
-    logic [DATA_W-1:0] mem [DEPTH];
-    logic [PTR_W-1:0]  rd_bin_q, rd_gray_q;  // read domain; declared here because the
-                                             // write domain synchronizes rd_gray_q
+    // Block RAM at every depth: its two ports sit inside the RAM, so the Gray pointers
+    // are the only fabric paths between the domains. (Distributed RAM would add one:
+    // write clock -> asynchronous read -> m_tdata_o register.)
+    (* ram_style = "block" *) logic [DATA_W-1:0] mem [DEPTH];
+    // The Gray registers are the CDC launch points the XDC names. DONT_TOUCH stops
+    // synthesis merging one into its equal binary bit (Gray MSB == binary MSB), which
+    // would move that launch point out from under the constraint.
+    logic [PTR_W-1:0]  rd_bin_q;
+    (* DONT_TOUCH = "TRUE" *) logic [PTR_W-1:0] rd_gray_q;  // read domain; declared here
+                                             // because the write domain synchronizes it
 
     // ---------------------------------------------------------------- write domain
-    logic [PTR_W-1:0] wr_bin_q, wr_gray_q;
+    logic [PTR_W-1:0] wr_bin_q;
+    (* DONT_TOUCH = "TRUE" *) logic [PTR_W-1:0] wr_gray_q;
     (* ASYNC_REG = "TRUE" *) logic [PTR_W-1:0] rd_gray_sync_q [SYNC_STAGES];
     logic [PTR_W-1:0] rd_bin_in_wr;
     logic             wr_fire;

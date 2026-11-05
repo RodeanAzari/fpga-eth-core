@@ -26,7 +26,7 @@
 // Latency (first byte accepted on s_* -> tx_en high): SYNC_STAGES + 1 tx_clk (FIFO)
 // + 2 (mii_tx); the first data nibble is 16 nibbles of preamble/SFD later.
 module eth_tx #(
-    parameter int FIFO_ADDR_W = 6,   // async FIFO depth 2**N bytes
+    parameter int FIFO_ADDR_W = 11,  // async FIFO depth 2**N bytes; 2048 x 9 = one BRAM18
     parameter int MIN_FRAME   = 64,  // bytes on the wire incl. FCS
     parameter int IFG_NIBBLES = 24   // 96 bit times
 ) (
