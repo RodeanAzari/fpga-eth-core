@@ -2,7 +2,10 @@
 
 Releases are tagged only after their gate test passes (see `~/fpga-coord/dependencies.toml`).
 
-## eth-core-v0.1 — gate passed 2026-11-05, tag pending
+## Unreleased
+- Nothing yet.
+
+## eth-core-v0.1 — 2026-11-05
 - Gate (`dependencies.toml`): RX link up, CRC, async FIFO formally proven, UDP payload out,
   >= 10 min sustained with zero drops, FIFO high-water mark reported.
 - Test: `rx_stats` on the Arty A7-100T (100 Mbit/s FD), `udp_seq_send --pps 8000 --size 1472
@@ -15,7 +18,9 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
 - Consumers: RX interface as documented in the README consumer guide; nothing to change.
 - Also added: `host/rx_stats_csv.py` (UART log → CSV).
 
-## Unreleased
+### Contents at this tag
+The TX path below is included but is hardware-gated only at `eth-core-v0.2`.
+
 - `async_fifo`: dual-clock Gray-pointer FIFO, AXI-Stream on both sides, first-word-fall-through
   read, write-side and read-side occupancy outputs.
   - Formal (`make formal`): no overflow or underflow, Gray encoding, synchronizer-chain

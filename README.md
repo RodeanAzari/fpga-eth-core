@@ -11,9 +11,8 @@ submodule at release tags:
 
 **Status:** RX and TX paths are complete and verified in simulation, and both example
 designs build in Vivado with timing met at 125 MHz. The RX hardware gate passed on
-2026-11-05: 10 minutes at 98.4 Mbit/s with zero drops ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)). No release is
-tagged yet: `eth-core-v0.1` (RX) awaits tagging, `eth-core-v0.2` (TX) its hardware
-echo test.
+2026-11-05: 10 minutes at 98.4 Mbit/s with zero drops ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)). Released:
+`eth-core-v0.1` (RX). `eth-core-v0.2` (TX) waits on its hardware echo test.
 
 Every number below comes from a committed report in [`docs/reports/`](docs/reports/),
 produced by `make example` / `make example-echo`, or from a test run by `make ci`.
