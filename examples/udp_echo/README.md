@@ -38,8 +38,14 @@ Host notes:
 - The echo's source is 192.168.10.2. If the cable interface is on another subnet, a
   strict reverse-path filter (`rp_filter=1`) can drop it. Either put the interface on
   192.168.10.0/24 or relax `rp_filter` on it.
-- Under WSL2 mirrored networking, the Windows firewall (Hyper-V firewall) may block
-  inbound UDP and needs a rule allowing it.
+- Under WSL2 mirrored networking, the Hyper-V firewall blocks all inbound traffic to WSL
+  by default, so no echo arrives (the board's `tx_sent` still counts them). Allow UDP
+  from the board only, in an Administrator PowerShell:
+  `New-NetFirewallHyperVRule -Name fpga-udp-echo -DisplayName "Arty UDP echo" -Direction Inbound -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -Protocol UDP -RemoteAddresses 192.168.10.2 -Action Allow`
+- On the WSL2 host, intact echoes were seen to arrive more than 256 datagrams late
+  (tens of ms at 8,000–15,000/s); whether the receive path or a descheduled checker
+  thread causes it is not established. `udp_echo_check` therefore declares a datagram
+  lost only after 1 s without its echo.
 
 Payloads average 736.5 bytes, about 802 bytes on the wire each with the 66 bytes of
 overhead, so 100 Mbit/s carries roughly 15,500 datagrams/s each way.

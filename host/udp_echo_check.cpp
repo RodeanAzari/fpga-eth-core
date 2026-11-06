@@ -8,12 +8,15 @@
 // an older datagram than one already seen counts as reordered (the wire cannot reorder,
 // but the host stack can, e.g. loopback across CPUs). An echo matching nothing
 // outstanding (corrupt, duplicate) is mismatched. A datagram is lost if it has no
-// intact echo by the time it leaves the window or the run ends, so
-// echo_ok + lost == sent always. Linux only (POSIX sockets, CLOCK_MONOTONIC).
+// intact echo kLateNs after it was sent, or by the end of the run, so
+// echo_ok + lost == sent always. Loss is judged by age, not by how many datagrams
+// followed: on the WSL2 host, intact echoes arrived > 256 datagrams late, and late echoes
+// must not become false losses. Linux only (POSIX sockets, CLOCK_MONOTONIC).
 //
 // Pacing busy-waits on an absolute CLOCK_MONOTONIC schedule (t0 + i / pps) and polls the
-// socket non-blocking while it waits, so one thread both sends and receives. A send that
-// fails with ENOBUFS/EAGAIN is retried with the same datagram. After the last send the
+// socket non-blocking while it waits and before every send, so one thread both sends and
+// receives, and a catch-up burst after a scheduling stall still reads the echoes already
+// queued. A send that fails with ENOBUFS/EAGAIN is retried with the same datagram. After the last send the
 // checker keeps receiving for --drain-ms.
 //
 // Output: a progress line per second on stderr; a key=value summary on stdout, for the
@@ -37,7 +40,7 @@
 namespace {
 
 constexpr int kMaxPayload = 1472;  // 1500 MTU - 20 IPv4 - 8 UDP
-constexpr uint64_t kWindow = 256;  // datagrams outstanding before one is declared lost
+constexpr int64_t kLateNs = 1'000'000'000;  // no intact echo after this long = lost
 // Wire bytes per datagram beyond the payload: preamble+SFD 8, Ethernet 14, IPv4 20,
 // UDP 8, FCS 4, IFG 12. Payloads under 18 bytes are padded to the 64-byte minimum.
 constexpr int kWireOverhead = 8 + 14 + 20 + 8 + 4 + 12;
@@ -136,34 +139,57 @@ Args parse(int argc, char** argv) {
 }
 
 struct Checker {
-    std::vector<std::vector<uint8_t>> ring = std::vector<std::vector<uint8_t>>(kWindow);
-    std::vector<char> got = std::vector<char>(kWindow, 0);
+    // Ring of outstanding datagrams, sized for 2 x kLateNs at the configured rate, so in a
+    // paced run a slot is reused only after its datagram has been judged by age. The
+    // count-based finalize in on_send is a backstop for catch-up bursts.
+    explicit Checker(double pps) {
+        const double want = 2.0 * pps * (static_cast<double>(kLateNs) / 1e9);
+        while (static_cast<double>(size) < want) size <<= 1;
+        ring.resize(size);
+        got.assign(size, 0);
+        sent_at.assign(size, 0);
+    }
+    uint64_t size = 256;
+    std::vector<std::vector<uint8_t>> ring;
+    std::vector<char> got;
+    std::vector<int64_t> sent_at;
     uint64_t lo = 0;        // oldest datagram not yet finalized
+    uint64_t open = 0;      // first datagram >= lo without an echo (scan start)
     uint64_t max_seen = 0;  // 1 + highest datagram echoed so far
     uint64_t ok = 0, lost = 0, mismatched = 0, reordered = 0, ok_bytes = 0;
 
     void finalize_below(uint64_t end) {
         for (; lo < end; ++lo) {
-            if (!got[lo % kWindow]) ++lost;
+            if (!got[lo % size]) ++lost;
         }
+        if (open < lo) open = lo;
     }
 
-    // Datagram j (= the count sent before it) is about to be sent with payload p.
-    void on_send(uint64_t j, const std::vector<uint8_t>& p) {
-        if (j >= kWindow) finalize_below(j - kWindow + 1);
-        ring[j % kWindow] = p;
-        got[j % kWindow] = 0;
+    // Finalize every datagram sent more than kLateNs before `now`.
+    void expire(int64_t now, uint64_t sent) {
+        uint64_t end = lo;
+        while (end < sent && now - sent_at[end % size] > kLateNs) ++end;
+        finalize_below(end);
+    }
+
+    // Datagram j (= the count sent before it) is about to be sent with payload p at `now`.
+    void on_send(uint64_t j, const std::vector<uint8_t>& p, int64_t now) {
+        if (j >= size) finalize_below(j - size + 1);
+        ring[j % size] = p;
+        got[j % size] = 0;
+        sent_at[j % size] = now;
     }
 
     void on_echo(const uint8_t* p, size_t n, uint64_t sent) {
-        for (uint64_t j = lo; j < sent; ++j) {
-            const auto& w = ring[j % kWindow];
-            if (got[j % kWindow] || w.size() != n || std::memcmp(w.data(), p, n) != 0) continue;
-            got[j % kWindow] = 1;
+        for (uint64_t j = open; j < sent; ++j) {
+            const auto& w = ring[j % size];
+            if (got[j % size] || w.size() != n || std::memcmp(w.data(), p, n) != 0) continue;
+            got[j % size] = 1;
             ++ok;
             ok_bytes += n;
             if (j + 1 < max_seen) ++reordered;
             if (j + 1 > max_seen) max_seen = j + 1;
+            while (open < sent && got[open % size]) ++open;
             return;
         }
         ++mismatched;
@@ -208,7 +234,7 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
 
-    Checker chk;
+    Checker chk(a.pps);
     std::vector<uint8_t> buf;
     std::vector<uint8_t> rx(2048);
     const double period_ns = 1e9 / a.pps;
@@ -222,6 +248,7 @@ int main(int argc, char** argv) {
             if (n < 0) return;
             chk.on_echo(rx.data(), static_cast<size_t>(n), sent);
         }
+        chk.expire(now_ns(), sent);
     };
 
     std::fprintf(stderr, "echo check: %d..%d-byte payloads to %s:%d at %.0f pps\n",
@@ -233,10 +260,10 @@ int main(int argc, char** argv) {
         if (a.count > 0 && sent >= a.count) break;
         const int64_t due = t0 + static_cast<int64_t>(static_cast<double>(sent) * period_ns);
         if (limit_ns > 0 && due - t0 >= limit_ns) break;
-        while (now_ns() < due) poll_rx();
+        do poll_rx(); while (now_ns() < due);
 
         gen.make(sent, buf);
-        chk.on_send(sent, buf);
+        chk.on_send(sent, buf, now_ns());
         ssize_t n = sendto(fd, buf.data(), buf.size(), 0, reinterpret_cast<sockaddr*>(&dst),
                            sizeof dst);
         if (n < 0) {
