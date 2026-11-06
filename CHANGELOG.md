@@ -5,7 +5,7 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
 ## Unreleased
 - Nothing yet.
 
-## eth-core-v0.2 — gate passed 2026-11-05, tag pending
+## eth-core-v0.2 — 2026-11-05
 - Gate (`dependencies.toml`): TX generic-payload echo test, lengths 1–1,472 B; host MAC/IP
   learning; consumer guide + non-ITCH example design.
 - Test: `udp_echo` on the Arty A7-100T (100 Mbit/s FD), `udp_echo_check --pps 15000

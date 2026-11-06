@@ -13,7 +13,7 @@ submodule at release tags:
 designs build in Vivado with timing met at 125 MHz. The RX hardware gate passed on
 2026-11-05: 10 minutes at 98.4 Mbit/s with zero drops ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)). The TX
 gate followed: 9,000,000 echoes of 1–1,472 B, every one intact, at 96.3 Mbit/s each way
-([evidence](data/results/2026-11-05_v0.2_udp_echo_sustained.md)). Released: `eth-core-v0.1` (RX); `eth-core-v0.2` (TX) pending its tag.
+([evidence](data/results/2026-11-05_v0.2_udp_echo_sustained.md)). Released: `eth-core-v0.1` (RX) and `eth-core-v0.2` (TX).
 
 Every number below comes from a committed report in [`docs/reports/`](docs/reports/),
 produced by `make example` / `make example-echo`, or from a test run by `make ci`.
