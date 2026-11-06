@@ -5,6 +5,26 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
 ## Unreleased
 - Nothing yet.
 
+## eth-core-v0.2 — gate passed 2026-11-05, tag pending
+- Gate (`dependencies.toml`): TX generic-payload echo test, lengths 1–1,472 B; host MAC/IP
+  learning; consumer guide + non-ITCH example design.
+- Test: `udp_echo` on the Arty A7-100T (100 Mbit/s FD), `udp_echo_check --pps 15000
+  --seconds 600` (seed 1) from the host; every echo matched byte for byte.
+- Result: PASS. 9,000,000 sent, 9,000,000 echoed intact (6,630,957,811 payload bytes),
+  0 lost, 0 mismatched; every length 1–1,472 sent ≥ 5,782 times. Board: `udp_ok` =
+  `tx_sent` = 9,000,000, every RX error counter 0, `tx_oversize` = `tx_underrun` = 0.
+  Reply address learned from received frames (no ARP).
+- Evidence: `data/results/2026-11-05_v0.2_udp_echo_sustained.{csv,md}`, raw UART log and
+  checker output alongside. Consumer guide: README; non-ITCH examples: `rx_stats`, `udp_echo`.
+- Consumers: TX interface as documented in the README consumer guide (payload length
+  counted from tlast, no length input); nothing to change since v0.1.
+- `host/udp_echo_check`: a datagram is lost only 1 s after sending without an intact echo
+  (was: after 256 later datagrams), and the socket is drained before every send. On this
+  host, intact echoes arriving > 256 datagrams late were miscounted as lost + mismatched.
+  New loopback case (600 echoes released late) fails on the old checker.
+- `host/rx_stats_csv.py --echo`: CSV for `udp_echo` UART logs.
+- `examples/udp_echo/README.md`: the Hyper-V firewall rule needed under WSL2.
+
 ## eth-core-v0.1 — 2026-11-05
 - Gate (`dependencies.toml`): RX link up, CRC, async FIFO formally proven, UDP payload out,
   >= 10 min sustained with zero drops, FIFO high-water mark reported.

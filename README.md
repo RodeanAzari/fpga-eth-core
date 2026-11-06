@@ -11,8 +11,9 @@ submodule at release tags:
 
 **Status:** RX and TX paths are complete and verified in simulation, and both example
 designs build in Vivado with timing met at 125 MHz. The RX hardware gate passed on
-2026-11-05: 10 minutes at 98.4 Mbit/s with zero drops ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)). Released:
-`eth-core-v0.1` (RX). `eth-core-v0.2` (TX) waits on its hardware echo test.
+2026-11-05: 10 minutes at 98.4 Mbit/s with zero drops ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)). The TX
+gate followed: 9,000,000 echoes of 1–1,472 B, every one intact, at 96.3 Mbit/s each way
+([evidence](data/results/2026-11-05_v0.2_udp_echo_sustained.md)). Released: `eth-core-v0.1` (RX); `eth-core-v0.2` (TX) pending its tag.
 
 Every number below comes from a committed report in [`docs/reports/`](docs/reports/),
 produced by `make example` / `make example-echo`, or from a test run by `make ci`.
@@ -34,7 +35,7 @@ produced by `make example` / `make example-echo`, or from a test run by `make ci
 | **Formal** | `async_fifo`: k-induction PASS at depth 24 (no overflow/underflow, Gray, data integrity) |
 | **Simulation** | 21 cocotb tests (26 runs across parameter sets), each new test shown to fail on a planted bug |
 | **Hardware RX** | 4,880,000 / 4,880,000 datagrams, 0 errors, FIFO high-water 1 B; 610 s at 98.4 Mbit/s ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)) |
-| **Hardware TX** | `[TBD]` (`udp_echo` gate) |
+| **Hardware TX** | 9,000,000 / 9,000,000 echoes intact, lengths 1–1,472 B, 0 underruns; 600 s at 96.3 Mbit/s each way ([evidence](data/results/2026-11-05_v0.2_udp_echo_sustained.md)) |
 | **CI** | `make ci` locally: lint (zero warnings), formal, sim, host loopback tests |
 
 ## Architecture
@@ -221,8 +222,8 @@ only clock-domain crossing. See the CHANGELOG for why.
 | **Formal** (`make formal`) | `async_fifo`, SymbiYosys k-induction at depth 24 on a depth-4 instance, two free-running clocks | PASS. Proven: no overflow or underflow, Gray encoding, synchronizer monotonicity, data integrity of an arbitrary tagged word. Three planted bugs each fail the proof. |
 | **cocotb** (`make sim`) | 21 tests, 26 runs across parameter sets, Verilator 5.050, seeds logged and replayable | All pass. Frames from MII nibbles to payloads and back; every status count exact; an independent RFC parser judges RX and TX. |
 | **End to end** | `examples/udp_echo` in sim: MII pins in, MII pins out | 120 echoes of 1–1,472 B byte-exact to 4 rotating senders; foreign and bad-FCS frames not echoed; UART counters exact |
-| **Host tools** (`make host-test`) | `udp_seq_send` and `udp_echo_check` over loopback | Every datagram checked; injected drop and corruption reported exactly |
-| **Hardware** | `rx_stats` on the Arty, 100 Mbit/s full duplex | 610 s at 8,000 datagrams/s: every datagram delivered byte-exact, every error counter 0 ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)); `udp_echo` `[TBD]` |
+| **Host tools** (`make host-test`) | `udp_seq_send` and `udp_echo_check` over loopback | Every datagram checked; injected drop and corruption reported exactly; late echoes not miscounted as lost |
+| **Hardware** | `rx_stats` on the Arty, 100 Mbit/s full duplex | 610 s at 8,000 datagrams/s: every datagram delivered byte-exact, every error counter 0 ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)); `udp_echo` 600 s at 15,000 datagrams/s, 1–1,472 B: 9,000,000 echoes intact ([evidence](data/results/2026-11-05_v0.2_udp_echo_sustained.md)) |
 
 Testbenches use [tb-common](https://github.com/RodeanAzari/tb-common) (AXI-Stream
 driver/monitor, in-order scoreboard, seeded RNG) at tag `tb-common-v0.1`.
@@ -283,7 +284,7 @@ with a `key=value` summary for results files.
 | Clock crossings | All "Max Delay Datapath Only", 0 critical warnings | both examples | [clock_interaction.rpt](docs/reports/udp_echo/clock_interaction.rpt) |
 | Sustained RX, zero drops | 4,880,000 sent, 4,880,000 delivered, `ovf_lost` 0 | 610 s, 1,472 B payloads, 8,000/s = 98.4 Mbit/s on the wire | [CSV](data/results/2026-11-05_v0.1_rx_stats_sustained.csv), [notes](data/results/2026-11-05_v0.1_rx_stats_sustained.md) |
 | RX FIFO high-water mark | 1 byte of 2,048 (core-side view, may read 2–3 low) | same run | same |
-| TX echo, 1–1,472 B | `[TBD]` | `udp_echo_check` | — |
+| TX echo, 1–1,472 B | 9,000,000 sent, 9,000,000 intact, 0 lost; every length ≥ 5,782 times | 600 s, 15,000/s = 96.3 Mbit/s each way, full duplex | [CSV](data/results/2026-11-05_v0.2_udp_echo_sustained.csv), [notes](data/results/2026-11-05_v0.2_udp_echo_sustained.md) |
 
 ## Limitations
 
@@ -298,7 +299,6 @@ with a `key=value` summary for results files.
   IPv4.
 - **One payload buffered on TX.** `udp_tx` cannot accept the next payload until the
   current frame has left it. That keeps up with line rate but limits burst absorption.
-- **TX untested on hardware so far.** The `udp_echo` rows stay `[TBD]` until its gate runs.
 - **The FIFO high-water mark is for steady streaming.** `rx_stats` never backpressures
   `udp_rx`, so the 1-byte mark says nothing about a consumer that stalls.
 - **The test host reorders ~0.08% of datagrams** (Windows I225-LM driver, shown by

@@ -1,0 +1,15 @@
+dst=239.1.1.1:26400
+size_range=1..1472
+seed=1
+sent=9000000
+echo_ok=9000000
+lost=0
+mismatched=0
+reordered=168
+payload_bytes_sent=6630957811
+payload_bytes_ok=6630957811
+send_retries=0
+elapsed_s=600.000
+achieved_pps=15000.0
+wire_mbps_each_way=96.345
+interrupted=0
