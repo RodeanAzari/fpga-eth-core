@@ -10,9 +10,10 @@ submodule at release tags:
 - SerDes lab (P4, stats and sample streaming)
 
 **Status:** RX and TX paths are complete and verified in simulation, and both example
-designs build in Vivado with timing met at 125 MHz. No release is tagged yet:
-`eth-core-v0.1` (RX) and `eth-core-v0.2` (TX) each wait on their hardware gate test,
-which needs the Arty's Ethernet link. The board programs and reports over UART.
+designs build in Vivado with timing met at 125 MHz. The RX hardware gate passed on
+2026-11-05: 10 minutes at 98.4 Mbit/s with zero drops ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)). No release is
+tagged yet: `eth-core-v0.1` (RX) awaits tagging, `eth-core-v0.2` (TX) its hardware
+echo test.
 
 Every number below comes from a committed report in [`docs/reports/`](docs/reports/),
 produced by `make example` / `make example-echo`, or from a test run by `make ci`.
@@ -33,7 +34,8 @@ produced by `make example` / `make example-echo`, or from a test run by `make ci
 | **Cost (RX + TX)** | 858 LUT, 1,323 FF, 2 RAMB36 + 2 RAMB18 (3 BRAM36 tiles); per block [below](#resource-cost) |
 | **Formal** | `async_fifo`: k-induction PASS at depth 24 (no overflow/underflow, Gray, data integrity) |
 | **Simulation** | 21 cocotb tests (26 runs across parameter sets), each new test shown to fail on a planted bug |
-| **Hardware** | Board programs, UART counters run; link and gate tests `[TBD]` (waiting on a cable) |
+| **Hardware RX** | 4,880,000 / 4,880,000 datagrams, 0 errors, FIFO high-water 1 B; 610 s at 98.4 Mbit/s ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)) |
+| **Hardware TX** | `[TBD]` (`udp_echo` gate) |
 | **CI** | `make ci` locally: lint (zero warnings), formal, sim, host loopback tests |
 
 ## Architecture
@@ -221,7 +223,7 @@ only clock-domain crossing. See the CHANGELOG for why.
 | **cocotb** (`make sim`) | 21 tests, 26 runs across parameter sets, Verilator 5.050, seeds logged and replayable | All pass. Frames from MII nibbles to payloads and back; every status count exact; an independent RFC parser judges RX and TX. |
 | **End to end** | `examples/udp_echo` in sim: MII pins in, MII pins out | 120 echoes of 1–1,472 B byte-exact to 4 rotating senders; foreign and bad-FCS frames not echoed; UART counters exact |
 | **Host tools** (`make host-test`) | `udp_seq_send` and `udp_echo_check` over loopback | Every datagram checked; injected drop and corruption reported exactly |
-| **Hardware** | `rx_stats` and `udp_echo` on the Arty | Board programs and UART reports; link and gates `[TBD]` |
+| **Hardware** | `rx_stats` on the Arty, 100 Mbit/s full duplex | 610 s at 8,000 datagrams/s: every datagram delivered byte-exact, every error counter 0 ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)); `udp_echo` `[TBD]` |
 
 Testbenches use [tb-common](https://github.com/RodeanAzari/tb-common) (AXI-Stream
 driver/monitor, in-order scoreboard, seeded RNG) at tag `tb-common-v0.1`.
@@ -280,8 +282,8 @@ with a `key=value` summary for results files.
 | MII RX input setup margin | +6.299 ns | DP83848 T2.5.2, RX_CLK→data 10–30 ns | same |
 | MII TX output setup margin | +20.645 ns | DP83848 T2.4.2, 10 ns setup | [timing_summary.rpt](docs/reports/udp_echo/timing_summary.rpt) |
 | Clock crossings | All "Max Delay Datapath Only", 0 critical warnings | both examples | [clock_interaction.rpt](docs/reports/udp_echo/clock_interaction.rpt) |
-| Sustained RX, zero drops | `[TBD]` | ≥ 10 min at the highest rate the link sustains | — |
-| RX FIFO high-water mark | `[TBD]` | same run | — |
+| Sustained RX, zero drops | 4,880,000 sent, 4,880,000 delivered, `ovf_lost` 0 | 610 s, 1,472 B payloads, 8,000/s = 98.4 Mbit/s on the wire | [CSV](data/results/2026-11-05_v0.1_rx_stats_sustained.csv), [notes](data/results/2026-11-05_v0.1_rx_stats_sustained.md) |
+| RX FIFO high-water mark | 1 byte of 2,048 (core-side view, may read 2–3 low) | same run | same |
 | TX echo, 1–1,472 B | `[TBD]` | `udp_echo_check` | — |
 
 ## Limitations
@@ -297,7 +299,12 @@ with a `key=value` summary for results files.
   IPv4.
 - **One payload buffered on TX.** `udp_tx` cannot accept the next payload until the
   current frame has left it. That keeps up with line rate but limits burst absorption.
-- **Untested on hardware so far.** Every hardware row is `[TBD]` until the gate runs.
+- **TX untested on hardware so far.** The `udp_echo` rows stay `[TBD]` until its gate runs.
+- **The FIFO high-water mark is for steady streaming.** `rx_stats` never backpressures
+  `udp_rx`, so the 1-byte mark says nothing about a consumer that stalls.
+- **The test host reorders ~0.08% of datagrams** (Windows I225-LM driver, shown by
+  pktmon). None are lost, but `rx_stats`'s sequence check counts them, and a consumer
+  that needs order must use a host path that preserves it.
 - **Bad-FCS frames from the host** are only tested in simulation. NIC support for
   sending them (`SO_NOFCS`) has not been checked.
 
