@@ -3,7 +3,7 @@
 Releases are tagged only after their gate test passes (see `~/fpga-coord/dependencies.toml`).
 
 ## Unreleased
-- Nothing yet.
+- MIT license added (`LICENSE`). No RTL or interface change; consumers need do nothing.
 
 ## eth-core-v0.2 — 2026-11-05
 - Gate (`dependencies.toml`): TX generic-payload echo test, lengths 1–1,472 B; host MAC/IP

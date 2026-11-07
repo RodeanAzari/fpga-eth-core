@@ -349,3 +349,7 @@ critical CDC violation exists.
   echo checked.
 - After that: changes only through requests from consuming projects, each a new tag
   with a CHANGELOG note on what consumers must change.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
