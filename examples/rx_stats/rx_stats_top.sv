@@ -26,7 +26,8 @@
 // Start-up: the PHY is held in reset (eth_rstn low) for PHY_RST_CYCLES after the MMCM
 // locks, then the MAC (both domains) stays in reset until MAC_START_CYCLES, by which
 // time rx_clk from the PHY is running. ck_rst (red button) restarts everything.
-// MDIO is not used: the PHY's straps select auto-negotiation; eth_mdc is held low.
+// MDIO: mdio_link_mon polls the PHY's link status; the MAC is held in reset while
+// the link is down and re-enters reset on link loss (fpga-coord request 0005).
 // The transmit pins are held idle. Top-level ports use the Digilent master-XDC names.
 //
 // Configuration: OWN_MAC/GROUP_IP/UDP_PORT drive udp_rx's runtime cfg inputs from
@@ -37,6 +38,8 @@ module rx_stats_top #(
     parameter int          REPORT_CYCLES    = CLK_HZ,             // 1 s
     parameter int          PHY_RST_CYCLES   = CLK_HZ / 100,       // 10 ms
     parameter int          MAC_START_CYCLES = CLK_HZ / 5,         // 200 ms
+    parameter int          MDC_HZ           = 2_500_000,          // MDIO clock
+    parameter int          LINK_POLL_CYCLES = CLK_HZ / 100,       // 10 ms
     parameter logic [47:0] OWN_MAC          = 48'h02_00_0A_0B_0C_0D,
     parameter logic [31:0] GROUP_IP         = 32'hEF_01_01_01,    // 239.1.1.1
     parameter logic [15:0] UDP_PORT         = 16'd26400
@@ -54,7 +57,8 @@ module rx_stats_top #(
     input  wire logic       eth_rxerr,
     output logic            eth_tx_en,
     output logic [3:0]      eth_txd,
-    output logic            eth_mdc
+    output logic            eth_mdc,
+    inout  wire logic       eth_mdio
 );
     localparam int N_FIELDS  = 15;
     localparam int FIFO_AW   = 11;
@@ -82,6 +86,7 @@ module rx_stats_top #(
     );
 
     logic [START_W-1:0] start_q;
+    logic               link_up, phy_ok_unused, mdio_o, mdio_oe;
     logic               mac_rst_q, mii_rst;
 
     always_ff @(posedge clk) begin
@@ -92,7 +97,7 @@ module rx_stats_top #(
         end else begin
             if (start_q != START_W'(MAC_START_CYCLES)) start_q <= start_q + START_W'(1);
             eth_rstn  <= start_q >= START_W'(PHY_RST_CYCLES);
-            mac_rst_q <= start_q != START_W'(MAC_START_CYCLES);
+            mac_rst_q <= start_q != START_W'(MAC_START_CYCLES) || !link_up;
         end
     end
 
@@ -104,7 +109,22 @@ module rx_stats_top #(
 
     assign eth_tx_en = 1'b0;
     assign eth_txd   = 4'd0;
-    assign eth_mdc   = 1'b0;
+
+    mdio_link_mon #(
+        .CLK_HZ      (CLK_HZ),
+        .MDC_HZ      (MDC_HZ),
+        .POLL_CYCLES (LINK_POLL_CYCLES)
+    ) u_link (
+        .clk_i     (clk),
+        .rst_i     (rst),
+        .mdc_o     (eth_mdc),
+        .mdio_o    (mdio_o),
+        .mdio_oe_o (mdio_oe),
+        .mdio_i    (eth_mdio),
+        .link_up_o (link_up),
+        .phy_ok_o  (phy_ok_unused)
+    );
+    assign eth_mdio = mdio_oe ? mdio_o : 1'bz;
 
     // ------------------------------------------------------------ receive path
     logic [7:0]       f_tdata;

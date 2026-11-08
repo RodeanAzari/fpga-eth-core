@@ -11,7 +11,8 @@ import struct
 import zlib
 from dataclasses import dataclass
 
-from cocotb.triggers import FallingEdge
+import cocotb
+from cocotb.triggers import FallingEdge, First, RisingEdge, Timer
 
 PREAMBLE_NIBBLES = 15  # 7 x 0x55 plus the low nibble of the SFD (0x5)
 MIN_IFG_NIBBLES = 24   # 96 bit times at 4 bits per clock
@@ -172,3 +173,101 @@ def wire_image(frame: bytes, min_data: int = 60) -> bytes:
     """What a correct MAC puts after the SFD for `frame`: zero padding to min_data
     bytes, then the FCS."""
     return with_fcs(frame + bytes(max(0, min_data - len(frame))))
+
+
+class Clause22Phy:
+    """MDIO PHY model, IEEE 802.3 clause 22, written from the standard (not the RTL).
+
+    Samples MDIO on MDC rising edges; syncs on >= 32 ones followed by the 0 of ST;
+    decodes ST/OP/PHYAD/REGAD; if PHYAD is its own, answers TA (Z, 0) and 16 data bits
+    MSB first, each changing tco_ns after an MDC rising edge (DP83848 max: 300 ns).
+    Only BMSR (register 1) is modelled: link status (bit 2) is latched-low, so the first
+    read after a loss returns 0 (22.2.4.2.13).
+
+    Handles: mdc (DUT output), oe/o (the DUT's MDIO enable and value), line (the DUT's
+    MDIO input, driven here as the wired bus: DUT when enabled, else this PHY, else the
+    pull-up). Protocol violations by the DUT land in .errors; tests assert it is empty.
+    """
+
+    def __init__(self, mdc, oe, o, line, addr: int, tco_ns: int = 300):
+        self.mdc, self.oe, self.o, self.line = mdc, oe, o, line
+        self.addr = addr
+        self.tco_ns = tco_ns
+        self.bmsr = 0x7849          # DP83848 reset value; bit 2 is replaced by the link
+        self.link = False
+        self.link_lost = False
+        self.drive: int | None = None
+        self.frames: list[list[int]] = []   # 32 preamble ones + 14 header bits, per read
+        self.reads = 0                       # reads answered
+        self.errors: list[str] = []
+        cocotb.start_soon(self._bus())
+        cocotb.start_soon(self._run())
+
+    def set_link(self, up: bool) -> None:
+        if self.link and not up:
+            self.link_lost = True
+        self.link = up
+
+    def _bmsr_value(self) -> int:
+        up = self.link and not self.link_lost
+        self.link_lost = False
+        return (self.bmsr & ~0x4) | (0x4 if up else 0)
+
+    def _update(self) -> None:
+        dut_drives = int(self.oe.value) == 1
+        if dut_drives and self.drive is not None:
+            self.errors.append("bus contention: DUT and PHY both drive MDIO")
+        if dut_drives:
+            self.line.value = int(self.o.value)
+        else:
+            self.line.value = 1 if self.drive is None else self.drive
+
+    def _set_drive(self, value: int | None) -> None:
+        self.drive = value
+        self._update()
+
+    async def _bus(self):
+        # Event-driven: re-resolve the wired bus whenever either side changes.
+        while True:
+            self._update()
+            await First(self.oe.value_change, self.o.value_change)
+
+    async def _bit(self) -> int:
+        await RisingEdge(self.mdc)
+        return int(self.line.value)
+
+    async def _drive_after_edge(self, value: int | None):
+        await RisingEdge(self.mdc)
+        await Timer(self.tco_ns, unit="ns")
+        self._set_drive(value)
+
+    async def _run(self):
+        while True:
+            ones = 0
+            while True:
+                b = await self._bit()
+                if b:
+                    ones += 1
+                elif ones >= 32:
+                    break
+                else:
+                    ones = 0
+            hdr = [0] + [await self._bit() for _ in range(13)]
+            self.frames.append([1] * 32 + hdr)
+            phyad = int("".join(map(str, hdr[4:9])), 2)
+            regad = int("".join(map(str, hdr[9:14])), 2)
+            is_read = hdr[0:4] == [0, 1, 1, 0]
+            # TA, first bit: the station must have released the line (both are Z).
+            await RisingEdge(self.mdc)
+            if int(self.oe.value):
+                self.errors.append("station still drives MDIO in TA")
+            if not is_read or phyad != self.addr:
+                continue
+            self.reads += 1
+            value = self._bmsr_value() if regad == 1 else 0xFFFF
+            # Already past the TA1 edge: drive TA2 = 0, then data; release after.
+            await Timer(self.tco_ns, unit="ns")
+            self._set_drive(0)
+            for i in range(15, -1, -1):
+                await self._drive_after_edge((value >> i) & 1)
+            await self._drive_after_edge(None)

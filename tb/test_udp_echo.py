@@ -21,7 +21,7 @@ import zlib
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge, Timer
-from eth import MiiDriver, MiiFrame, MiiTxMonitor, UdpFrame, with_fcs
+from eth import Clause22Phy, MiiDriver, MiiFrame, MiiTxMonitor, UdpFrame, with_fcs
 from tb_common import InOrderScoreboard, get_rng
 from test_rx_stats import uart_lines
 from test_udp_tx import parse as parse_udp
@@ -50,12 +50,18 @@ async def echo_all_lengths(dut):
     drv = MiiDriver(dut, dut.eth_rx_clk, rxd=dut.eth_rxd, dv=dut.eth_rx_dv, er=dut.eth_rxerr)
     mon = MiiTxMonitor(dut.eth_tx_clk, dut.eth_txd, dut.eth_tx_en)
     cocotb.start_soon(mon.run())
+    phy = Clause22Phy(dut.eth_mdc, dut.u_link.mdio_oe_o, dut.u_link.mdio_o, dut.eth_mdio,
+                      addr=1, tco_ns=10)
+    phy.set_link(True)
     lines: list[str] = []
     dut.ck_rst.value = 1
     cocotb.start_soon(uart_lines(dut, lines))
     await ClockCycles(dut.CLK100MHZ, 20)
-    while not int(dut.led[3].value):
+    for _ in range(20_000):  # MAC out of reset: start-up delay + two MDIO link reads
+        if int(dut.led[3].value):
+            break
         await RisingEdge(dut.CLK100MHZ)
+    assert int(dut.led[3].value), "MAC never left reset (link not up over MDIO?)"
 
     hosts = [(bytes([0x02]) + bytes(rng.randrange(256) for _ in range(5)),
               rng.randrange(1 << 32), rng.randrange(1024, 65536)) for _ in range(4)]

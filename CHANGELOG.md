@@ -4,6 +4,11 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
 
 ## Unreleased
 - MIT license added (`LICENSE`). No RTL or interface change; consumers need do nothing.
+- New `rtl/mdio_link_mon.sv`: MDIO (clause 22) BMSR poller with a debounced `link_up_o`
+  and `phy_ok_o` (the PHY answered). The examples now hold the MAC in reset until link up
+  and put it back in reset on link loss (fpga-coord request 0005). Consumers: add the file,
+  add the `eth_mdio` pin (Arty K13), and gate the MAC reset as the README's Resets section
+  describes. Untagged until the 100-reprogram hardware run passes.
 
 ## eth-core-v0.2 — 2026-11-05
 - Gate (`dependencies.toml`): TX generic-payload echo test, lengths 1–1,472 B; host MAC/IP

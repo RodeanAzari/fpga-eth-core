@@ -49,7 +49,11 @@ set_max_delay -datapath_only -from [get_cells -hier -filter {NAME =~ *u_eth_tx/u
 # Button, LEDs, UART (115200 baud, bit time 8.7 us) and PHY reset/MDC strap levels carry
 # no timing relationship worth constraining.
 set_false_path -from [get_ports ck_rst]
-set_false_path -to [get_ports {led[*] uart_rxd_out eth_rstn eth_mdc}]
+# MDIO (mdio_link_mon): MDC <= 2.5 MHz; the design drives MDIO 200 ns before the PHY's
+# MDC edge and samples it 380 ns after, through a 2-flop synchronizer, so the
+# protocol, not STA, sets these margins.
+set_false_path -from [get_ports eth_mdio]
+set_false_path -to [get_ports {led[*] uart_rxd_out eth_rstn eth_mdc eth_mdio}]
 
 # --- Configuration -------------------------------------------------------------------
 set_property CFGBVS VCCO [current_design]

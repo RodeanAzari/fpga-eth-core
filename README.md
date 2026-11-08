@@ -84,6 +84,7 @@ flowchart LR
 | MII TX | `rtl/mii_tx.sv` | Preamble, padding, FCS, exact IFG, underrun → bad FCS | `make sim` vs. zlib wire image |
 | **TX top** | `rtl/eth_tx.sv` | Core-domain frames → MII | `make sim` (via `udp_echo`) |
 | UDP TX | `rtl/udp_tx.sv` | Payload → full frame, length from tlast, RFC 791 checksum | `make sim` vs. independent RFC parser |
+| Link monitor | `rtl/mdio_link_mon.sv` | Polls BMSR over MDIO (clause 22); debounced `link_up_o`; `phy_ok_o` = PHY answered | `make sim` vs. clause-22 PHY model |
 
 ## Consumer guide
 
@@ -110,8 +111,20 @@ Add every file in `rtl/` to your build. For constraints:
 Each domain takes a synchronous, active-high reset from its own reset synchronizer,
 and all of them are fed by the same source. Both sides of an async FIFO must be in reset
 together. Hold the MAC in reset until the PHY clocks are running, because a domain whose
-clock is absent cannot leave reset. The examples release the PHY reset at 10 ms and the
-MAC at 200 ms after the MMCM locks (`examples/udp_echo/udp_echo_top.sv`,
+clock is absent cannot leave reset.
+
+**Hold the MAC in reset while the link is down.** The PHY's RX_CLK changes source when it
+locks to the link partner. On the Arty, a MAC already out of reset at that moment has come
+up with a corrupted RX FIFO (fpga-coord request 0005, seen on slow link-ups). Instantiate
+`mdio_link_mon` and OR `!link_up_o` into the MAC reset source. `link_up_o` rises 10–20 ms
+after the PHY reports link, and it falls on the first poll that sees a loss (BMSR's link
+bit is latched-low), so the MAC also goes back into reset on link loss. Drive the pad as
+`eth_mdio = mdio_oe_o ? mdio_o : 'z` and set `PHY_ADDR` (Arty: 1). If `phy_ok_o` stays 0,
+no PHY answered at that address. Independently, `fifo_level_o > 2**FIFO_ADDR_W` can
+never happen in a healthy FIFO; treat it as corruption and reset the MAC.
+
+The examples release the PHY reset at 10 ms and then hold the MAC in reset until both
+200 ms have passed and the link is up (`examples/udp_echo/udp_echo_top.sv`,
 `examples/rx_stats/reset_sync.sv`).
 
 ### Receive: `eth_rx` + `udp_rx`

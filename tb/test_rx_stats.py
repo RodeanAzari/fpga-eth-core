@@ -18,7 +18,7 @@ import os
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, RisingEdge
-from eth import MiiDriver, MiiFrame, UdpFrame, with_fcs
+from eth import Clause22Phy, MiiDriver, MiiFrame, UdpFrame, with_fcs
 from tb_common import get_rng
 
 CLKS_PER_BIT = int(os.environ["CLK_HZ"]) // int(os.environ["BAUD"])
@@ -57,14 +57,20 @@ async def counters_over_uart(dut):
     cocotb.start_soon(Clock(dut.CLK100MHZ, 10, unit="ns").start())
     cocotb.start_soon(Clock(dut.eth_rx_clk, 40, unit="ns").start())
     drv = MiiDriver(dut, dut.eth_rx_clk, rxd=dut.eth_rxd, dv=dut.eth_rx_dv, er=dut.eth_rxerr)
+    phy = Clause22Phy(dut.eth_mdc, dut.u_link.mdio_oe_o, dut.u_link.mdio_o, dut.eth_mdio,
+                      addr=1, tco_ns=10)
+    phy.set_link(True)
     dut.ck_rst.value = 1
     lines: list[str] = []
     cocotb.start_soon(uart_lines(dut, lines))
 
     await ClockCycles(dut.CLK100MHZ, 20)  # let the reset synchronizers assert
     assert int(dut.led[3].value) == 0 and int(dut.eth_rstn.value) == 0
-    while not int(dut.led[3].value):  # MAC out of reset
+    for _ in range(20_000):  # MAC out of reset: start-up delay + two MDIO link reads
+        if int(dut.led[3].value):
+            break
         await RisingEdge(dut.CLK100MHZ)
+    assert int(dut.led[3].value), "MAC never left reset (link not up over MDIO?)"
     assert int(dut.eth_rstn.value) == 1
 
     seqs = list(range(1000, 1030)) + list(range(1031, 1060))  # 1030 never sent
@@ -91,3 +97,42 @@ async def counters_over_uart(dut):
     assert got["uptime_s"] >= 1 and 0 < got["fifo_hwm"] < 2048
     assert int(dut.led[2].value) == 1  # sticky error LED: the CRC error
     cocotb.log.info("UART: %s", lines[-1].strip())
+
+
+@cocotb.test()
+async def mac_held_in_reset_while_link_down(dut):
+    """fpga-coord 0005: the MAC (core and rx_clk domains) leaves reset only once MDIO
+    reports link up, long after the fixed start-up delay, and re-enters reset on loss."""
+    cocotb.start_soon(Clock(dut.CLK100MHZ, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.eth_rx_clk, 40, unit="ns").start())
+    phy = Clause22Phy(dut.eth_mdc, dut.u_link.mdio_oe_o, dut.u_link.mdio_o, dut.eth_mdio,
+                      addr=1, tco_ns=10)
+    dut.ck_rst.value = 0  # restart the whole design after the previous test
+    await ClockCycles(dut.CLK100MHZ, 20)
+    dut.ck_rst.value = 1
+
+    # Link down: 10x the fixed start-up delay (MAC_START_CYCLES = 400), still in reset.
+    for _ in range(4000):
+        await RisingEdge(dut.CLK100MHZ)
+        assert int(dut.mac_rst_q.value) == 1 and int(dut.led[3].value) == 0
+    assert int(dut.mii_rst.value) == 1
+    assert int(dut.eth_rstn.value) == 1  # the PHY itself is out of reset meanwhile
+
+    phy.set_link(True)
+    for _ in range(3 * 600 + 2 * 512):  # two up reads, plus the poll in progress
+        await RisingEdge(dut.CLK100MHZ)
+        if not int(dut.mac_rst_q.value):
+            break
+    assert int(dut.mac_rst_q.value) == 0, "MAC never left reset with link up"
+    await ClockCycles(dut.eth_rx_clk, 4)
+    assert int(dut.mii_rst.value) == 0
+
+    phy.set_link(False)
+    for _ in range(600 + 512 + 10):
+        await RisingEdge(dut.CLK100MHZ)
+        if int(dut.mac_rst_q.value):
+            break
+    assert int(dut.mac_rst_q.value) == 1, "MAC stayed out of reset after link loss"
+    await ClockCycles(dut.eth_rx_clk, 4)
+    assert int(dut.mii_rst.value) == 1
+    assert phy.errors == []

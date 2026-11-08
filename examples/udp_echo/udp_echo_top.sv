@@ -23,15 +23,18 @@
 // 2,3,6,9,10,12,13 non-zero; led[3] MAC out of reset.
 //
 // Start-up and reset as rx_stats (PHY reset, then the MAC in all three domains).
-// MDIO is not used; eth_mdc is held low. Top-level ports use the Digilent master-XDC
-// names. Shared helpers (clk_gen, reset_sync, stats_report, uart_tx) come from
-// examples/rx_stats.
+// MDIO: mdio_link_mon polls the PHY's link status; the MAC is held in reset while
+// the link is down and re-enters reset on link loss (fpga-coord request 0005).
+// Top-level ports use the Digilent master-XDC names. Shared helpers (clk_gen,
+// reset_sync, stats_report, uart_tx) come from examples/rx_stats.
 module udp_echo_top #(
     parameter int          CLK_HZ           = 125_000_000,
     parameter int          BAUD             = 115_200,
     parameter int          REPORT_CYCLES    = CLK_HZ,             // 1 s
     parameter int          PHY_RST_CYCLES   = CLK_HZ / 100,       // 10 ms
     parameter int          MAC_START_CYCLES = CLK_HZ / 5,         // 200 ms
+    parameter int          MDC_HZ           = 2_500_000,          // MDIO clock
+    parameter int          LINK_POLL_CYCLES = CLK_HZ / 100,       // 10 ms
     parameter logic [47:0] OWN_MAC          = 48'h02_00_0A_0B_0C_0D,
     parameter logic [31:0] OWN_IP           = 32'hC0_A8_0A_02,    // 192.168.10.2
     parameter logic [31:0] GROUP_IP         = 32'hEF_01_01_01,    // 239.1.1.1
@@ -51,7 +54,8 @@ module udp_echo_top #(
     input  wire logic       eth_tx_clk,
     output logic            eth_tx_en,
     output logic [3:0]      eth_txd,
-    output logic            eth_mdc
+    output logic            eth_mdc,
+    inout  wire logic       eth_mdio
 );
     localparam int N_FIELDS = 15;
     localparam int FIFO_AW  = 11;
@@ -78,6 +82,7 @@ module udp_echo_top #(
     );
 
     logic [START_W-1:0] start_q;
+    logic               link_up, phy_ok_unused, mdio_o, mdio_oe;
     logic               mac_rst_q, mii_rx_rst, mii_tx_rst;
 
     always_ff @(posedge clk) begin
@@ -88,7 +93,7 @@ module udp_echo_top #(
         end else begin
             if (start_q != START_W'(MAC_START_CYCLES)) start_q <= start_q + START_W'(1);
             eth_rstn  <= start_q >= START_W'(PHY_RST_CYCLES);
-            mac_rst_q <= start_q != START_W'(MAC_START_CYCLES);
+            mac_rst_q <= start_q != START_W'(MAC_START_CYCLES) || !link_up;
         end
     end
 
@@ -104,7 +109,21 @@ module udp_echo_top #(
         .rst_o     (mii_tx_rst)
     );
 
-    assign eth_mdc = 1'b0;
+    mdio_link_mon #(
+        .CLK_HZ      (CLK_HZ),
+        .MDC_HZ      (MDC_HZ),
+        .POLL_CYCLES (LINK_POLL_CYCLES)
+    ) u_link (
+        .clk_i     (clk),
+        .rst_i     (rst),
+        .mdc_o     (eth_mdc),
+        .mdio_o    (mdio_o),
+        .mdio_oe_o (mdio_oe),
+        .mdio_i    (eth_mdio),
+        .link_up_o (link_up),
+        .phy_ok_o  (phy_ok_unused)
+    );
+    assign eth_mdio = mdio_oe ? mdio_o : 1'bz;
 
     // ------------------------------------------------------------ receive path
     logic [7:0]       f_tdata;
