@@ -369,6 +369,7 @@ critical CDC violation exists.
 |---|---|---|
 | [fpga-itch-orderbook](https://github.com/RodeanAzari/fpga-itch-orderbook) (private) | NASDAQ ITCH 5.0 market data to a hardware order book on the Arty A7 | `eth-core-v0.2` (submodule `rtl/eth`) |
 | [ccsds-meteor-lrpt-receiver](https://github.com/RodeanAzari/ccsds-meteor-lrpt-receiver) (private) | CCSDS satellite telemetry receiver | `eth-core-v0.2`: `eth_rx`, `udp_rx`, `udp_tx`, `eth_tx` (submodule `rtl/eth`) |
+| [serdes-lab](https://github.com/RodeanAzari/serdes-lab) | Hardware noise histogram over UDP on the Arty A7 | `eth-core-v0.2`: `eth_rx`, `eth_tx`, `udp_rx`, `udp_tx`, constraints, example `clk_gen`/`reset_sync` (submodule `rtl/eth`) |
 
 ## License
 
