@@ -1,0 +1,11 @@
+dst=239.1.1.1:26400
+payload_bytes=1472
+sent=8000
+first_seq=0
+last_seq=7999
+send_retries=0
+elapsed_s=1.000
+achieved_pps=8000.9
+payload_mbps=94.219
+wire_mbps=98.444
+interrupted=0
