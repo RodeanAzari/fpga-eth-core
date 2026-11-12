@@ -27,7 +27,10 @@ TESTS = {
         "eth_rx",
         ["rtl/mii_rx.sv", "rtl/rx_ovf_guard.sv", "rtl/async_fifo.sv", "rtl/crc32_d8.sv",
          "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/eth_rx.sv"],
-        [{"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12}, {"FIFO_ADDR_W": 4, "BUF_ADDR_W": 11}],
+        [{"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12, "CUT_THROUGH": 0},
+         {"FIFO_ADDR_W": 4, "BUF_ADDR_W": 11, "CUT_THROUGH": 0},
+         {"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12, "CUT_THROUGH": 1},
+         {"FIFO_ADDR_W": 4, "BUF_ADDR_W": 11, "CUT_THROUGH": 1}],
     ),
     "test_udp_rx": ("udp_rx", ["rtl/udp_rx.sv"], [{}]),
     "test_mdio_link_mon": (

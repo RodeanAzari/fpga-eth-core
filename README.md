@@ -25,7 +25,7 @@ produced by `make example` / `make example-echo`, or from a test run by `make ci
 |---|---|
 | **Target** | Xilinx 7-series; built and timed on the Arty A7-100T (`xc7a100tcsg324-1`), TI DP83848J PHY |
 | **PHY interface** | MII, 25 MHz nibble clocks, low nibble first; documented boundary, nothing PHY-specific beyond it |
-| **RX** | MII → SFD hunt → async FIFO → FCS check → store-and-forward → Eth/IPv4/UDP filter → payload |
+| **RX** | MII → SFD hunt → async FIFO → FCS check → store-and-forward (or cut-through, a build option) → Eth/IPv4/UDP filter → payload |
 | **TX** | payload → UDP/IPv4/Ethernet header → async FIFO → padding, FCS, IFG → MII |
 | **User interface** | Byte-wide AXI4-Stream with backpressure on both paths; runtime group/port/MAC/IP registers |
 | **Host learning** | Reply MAC/IP/port latched from received datagrams, so no ARP |
@@ -147,6 +147,24 @@ high-water mark, and `sfd_o` is the T0 timestamp event in the rx_clk domain.
 enough to fill the 4 KB frame buffer and then the 2 KB FIFO, frames are lost. Every loss
 is counted in `ovf_frames_o`, and no partial frame is ever delivered.
 
+**Cut-through (`CUT_THROUGH = 1`, from `eth-core-v0.3`; default 0).** No frame buffer:
+every frame of 5 bytes or more leaves `eth_rx` as it arrives, 4 bytes behind the wire (the
+FCS window), so a consumer can act on byte k about (frame length − k) × 80 ns earlier than
+in store-and-forward. The price: the verdict comes at the end. Bad frames (CRC, PHY
+error, runt, oversize, cut by a FIFO overflow) are delivered too, with `m_tuser_o` set on
+their tlast beat; you have already acted on their bytes, so decide what a late bad frame
+means for you (the order book marks itself stale). Status pulses keep their meaning and
+order (one per frame, in wire order), and `emitted_o`, valid with every status pulse,
+says whether that frame put a beat on `m_*` (frames of 4 bytes or fewer never do). That is
+what you need to match per-frame data captured at the SFD (`sfd_o`) to output frames: a
+frame's first beat leaves only after every earlier frame's status, and only a one-beat
+frame can be judged before its beat leaves. Backpressure in cut-through goes straight to
+the 2 KB FIFO, so stalls longer than ~2 KB of wire time lose frames (counted, and the
+frame in progress ends early with `m_tuser_o`). With `CUT_THROUGH = 0`, `m_tuser_o` is
+always 0 and `emitted_o` equals `frame_ok_o`. `udp_rx` needs no change: it passes
+payloads as they come, so pair its per-frame status with `eth_rx`'s bad tlast if you
+need to know a delivered datagram was bad.
+
 ### Transmit: `udp_tx` + `eth_tx`
 
 Connect `udp_tx.m_*` to `eth_tx.s_*`. Then:
@@ -209,8 +227,10 @@ eth_tx u_eth_tx (.clk_i(clk), .rst_i(rst), .s_tdata_i(t_tdata), .s_tvalid_i(t_tv
 | `udp_tx`: tlast in → first header byte out | 3 core | `rtl/udp_tx.sv` |
 | `mii_tx`: first byte valid → tx_en | 2 tx_clk, then 16 nibbles of preamble/SFD | `rtl/mii_tx.sv` |
 
-Both directions are store-and-forward. At 100 Mb/s, serialization dominates: one
-1,472-byte payload is about 123 µs on the wire.
+Both directions are store-and-forward by default. At 100 Mb/s, serialization dominates:
+one 1,472-byte payload is about 123 µs on the wire. With `eth_rx` in cut-through
+(`CUT_THROUGH = 1`), byte k leaves when byte k+4 has crossed the FIFO, + 1 cycle; the
+frame buffer's 2 cycles and the wait for the frame's end are gone.
 
 ### Resource cost
 
@@ -360,6 +380,10 @@ critical CDC violation exists.
   highest sustained rate with zero drops, and report the FIFO high-water mark.
 - **`eth-core-v0.2`:** `udp_echo` on hardware with random payloads of 1–1,472 B, every
   echo checked.
+- **`eth-core-v0.3`:** `eth_rx` cut-through option (default unchanged), checked in both
+  modes in simulation and with `rx_stats` built cut-through: ≥ 10 minutes on the board,
+  zero drops. Includes `mdio_link_mon`, not yet shown to fix fpga-coord 0005.
+- **`eth-core-v0.4`:** the fix for fpga-coord 0005, once a hardware test shows it.
 - After that: changes only through requests from consuming projects, each a new tag
   with a CHANGELOG note on what consumers must change.
 

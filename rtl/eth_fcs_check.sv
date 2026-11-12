@@ -12,7 +12,8 @@
 // with this priority: rx_err_o (upstream error), runt_o (fewer than MIN_FRAME bytes
 // including FCS, 802.3 clause 3.4), crc_err_o, else frame_ok_o. A frame of 4 bytes or
 // fewer has no payload and produces no output beats at all; it is still counted as a
-// runt. Frames are not checked for a maximum length here.
+// runt. Frames are not checked for a maximum length here. emitted_o, valid with every
+// status pulse, says the frame put at least one beat on m_* (5 bytes or more in).
 //
 // Latency: 1 cycle from an accepted input beat to its output beat, but each byte is
 // delayed by 4 input beats (the FCS window), so payload byte k leaves when input byte
@@ -39,7 +40,8 @@ module eth_fcs_check #(
     output logic            frame_ok_o,
     output logic            crc_err_o,
     output logic            rx_err_o,
-    output logic            runt_o
+    output logic            runt_o,
+    output logic            emitted_o      // valid with the status pulse
 );
     localparam int          FCS_BYTES  = 4;             // 802.3 clause 3.2.9
     localparam logic [31:0] CRC_INIT   = 32'hFFFF_FFFF;
@@ -85,11 +87,13 @@ module eth_fcs_check #(
             crc_err_o  <= 1'b0;
             rx_err_o   <= 1'b0;
             runt_o     <= 1'b0;
+            emitted_o  <= 1'b0;
         end else begin
             frame_ok_o <= 1'b0;
             crc_err_o  <= 1'b0;
             rx_err_o   <= 1'b0;
             runt_o     <= 1'b0;
+            emitted_o  <= 1'b0;
 
             if (fire && emit) begin
                 m_tvalid_o <= 1'b1;
@@ -107,6 +111,7 @@ module eth_fcs_check #(
                     runt_o     <= !s_tuser_i && too_short;
                     crc_err_o  <= !s_tuser_i && !too_short && bad_crc;
                     frame_ok_o <= !s_tuser_i && !too_short && !bad_crc;
+                    emitted_o  <= emit;
                 end else begin
                     crc_q <= crc_next;
                     if (cnt_q != CNT_W'(MIN_FRAME)) cnt_q <= cnt_q + CNT_W'(1);

@@ -1,5 +1,7 @@
 # Batch build of an example design for the Arty A7-100T:
-#   vivado -mode batch -source syn/build_example.tcl -tclargs <rx_stats|udp_echo> [<part>]
+#   vivado -mode batch -source syn/build_example.tcl -tclargs <rx_stats|udp_echo> [<part>] [ct]
+# "ct" builds rx_stats with eth_rx in cut-through (CUT_THROUGH=1) into build/rx_stats_ct/
+# and docs/reports/rx_stats_ct/.
 # Non-project flow; nothing but build/ is written, except the reports copied to
 # docs/reports/<example>/ for committing. The bitstream is written only if every timing
 # path meets and no clock-domain crossing is unconstrained.
@@ -12,6 +14,8 @@ if {[version -short] ne $expected_vivado} {
 set example [lindex $argv 0]
 set part    [lindex $argv 1]
 if {$part eq ""} { set part xc7a100tcsg324-1 }
+set ct      [expr {[lindex $argv 2] eq "ct"}]
+if {$ct && $example ne "rx_stats"} { error "ct: rx_stats only" }
 set repo    [file normalize [file join [file dirname [info script]] ..]]
 # Per example: top module, extra source globs (beyond rtl/ and the shared rx_stats
 # helpers), and constraint files read before async_fifo.xdc.
@@ -31,8 +35,9 @@ switch -- $example {
     }
     default { error "unknown example '$example' (rx_stats | udp_echo)" }
 }
-set rundir  [file join $repo build $example]
-set reports [file join $repo docs reports $example]
+set tag     [expr {$ct ? "${example}_ct" : $example}]
+set rundir  [file join $repo build $tag]
+set reports [file join $repo docs reports $tag]
 file mkdir $rundir $reports
 cd $rundir
 
@@ -46,7 +51,11 @@ read_verilog -sv $sv
 foreach x $xdcs { read_xdc $x }
 read_xdc -ref async_fifo [file join $repo constr async_fifo.xdc]
 
-synth_design -top $top -part $part
+if {$ct} {
+    synth_design -top $top -part $part -generic CUT_THROUGH=1
+} else {
+    synth_design -top $top -part $part
+}
 set bb [get_cells -hier -quiet -filter {IS_BLACKBOX == 1}]
 if {[llength $bb] > 0} { error "black boxes in the netlist: $bb" }
 report_utilization -file [file join $rundir post_synth_util.rpt]

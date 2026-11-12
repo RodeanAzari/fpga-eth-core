@@ -5,8 +5,15 @@
 //   mii_rx -> rx_ovf_guard -> async_fifo -> eth_fcs_check -> frame_buffer -> m_*
 //
 // Output: AXI-Stream, one byte per beat, one Ethernet frame (dst MAC .. payload, no
-// FCS) per tlast. Only frames with a good FCS, no PHY error, 64..MAX_FRAME+4 bytes on
-// the wire, and no FIFO overflow are delivered (store-and-forward).
+// FCS) per tlast.
+//   CUT_THROUGH = 0 (default, store-and-forward): only frames with a good FCS, no PHY
+//     error, 64..MAX_FRAME+4 bytes on the wire, and no FIFO overflow are delivered;
+//     m_tuser_o is always 0.
+//   CUT_THROUGH = 1: every frame of 5 bytes or more on the wire is output as it arrives,
+//     4 bytes behind the wire (the FCS window); no frame buffer. m_tuser_o on the tlast
+//     beat = the frame is bad (any status but frame_ok). A frame cut by a FIFO overflow
+//     ends early with m_tuser_o set. The consumer has acted on the bytes before the
+//     verdict; it must handle a bad tlast itself (ADR 0013 in fpga-itch-orderbook).
 //
 // Status (core domain, one-cycle pulses). Every frame that had an SFD gets exactly one:
 //   frame_ok_o   delivered on m_*
@@ -17,6 +24,11 @@
 //   ovf_o        the async FIFO overflowed; ovf_frames_o (valid with ovf_o) is how many
 //                frames were lost, saturating at 255. One pulse may cover several frames.
 // So: frames with SFD = frame_ok + crc_err + rx_err + runt + oversize + sum(ovf_frames).
+//   emitted_o    valid with every status pulse: the frame put at least one beat on m_*
+//                (store-and-forward: = frame_ok_o). In cut-through a frame's first beat
+//                normally leaves before its status; a 5-byte frame's single beat may
+//                leave after it. An overflow status with emitted_o covers the cut
+//                frame (counted in ovf_frames_o) and any frames lost whole after it.
 //
 // fifo_level_o: async FIFO occupancy seen from the core side (under-reports the true
 // level by up to the pointer-synchronizer delay, ~2-3 bytes at 25 MHz / 125 MHz).
@@ -27,10 +39,12 @@
 // synchronous, active-high, each from a reset synchronizer in its own domain, fed by the
 // same source (async_fifo requirement).
 //
-// Latency (last FCS nibble at the pins -> first frame byte valid on m_*):
-//   2 rx_clk (mii_rx flush) + SYNC_STAGES+1 core (FIFO) + 1 (fcs check) + 2 (buffer)
-//   + the 4-byte FCS window; see each sub-block's header.
+// Latency, store-and-forward (last FCS nibble at the pins -> first frame byte valid on
+// m_*): 2 rx_clk (mii_rx flush) + SYNC_STAGES+1 core (FIFO) + 1 (fcs check) + 2 (buffer)
+// + the 4-byte FCS window; see each sub-block's header. Cut-through: byte k is valid on
+// m_* when byte k+4 has crossed the FIFO, + 1 cycle (fcs check).
 module eth_rx #(
+    parameter bit CUT_THROUGH = 1'b0,  // 1: no frame buffer, see Output above
     parameter int FIFO_ADDR_W = 11,    // async FIFO depth 2**N bytes
     parameter int BUF_ADDR_W  = 12,    // frame buffer depth 2**N bytes
     parameter int MAX_FRAME   = 1518,  // max bytes after FCS strip
@@ -50,6 +64,7 @@ module eth_rx #(
     output logic            m_tvalid_o,
     input  wire logic       m_tready_i,
     output logic            m_tlast_o,
+    output logic            m_tuser_o,     // cut-through: bad frame, on tlast
     output logic            frame_ok_o,
     output logic            crc_err_o,
     output logic            rx_err_o,
@@ -57,6 +72,7 @@ module eth_rx #(
     output logic            oversize_o,
     output logic            ovf_o,
     output logic [7:0]      ovf_frames_o,
+    output logic            emitted_o,     // valid with any status pulse
     output logic [FIFO_ADDR_W:0] fifo_level_o
 );
     localparam int USER_OVF_BIT = 1;  // rx_ovf_guard: tuser[1] marks an abort beat
@@ -122,7 +138,7 @@ module eth_rx #(
     // ------------------------------------------------------------------ core domain
     logic [7:0] c_tdata;
     logic       c_tvalid, c_tready, c_tlast, c_tuser;
-    logic       fcs_ok_unused, fcs_rx_err;
+    logic       fcs_ok, fcs_rx_err, fcs_emitted;
     logic       ovf_q;
     logic [7:0] ovf_frames_q;
 
@@ -141,10 +157,11 @@ module eth_rx #(
         .m_tready_i (c_tready),
         .m_tlast_o  (c_tlast),
         .m_tuser_o  (c_tuser),
-        .frame_ok_o (fcs_ok_unused),
+        .frame_ok_o (fcs_ok),
         .crc_err_o  (crc_err_o),
         .rx_err_o   (fcs_rx_err),
-        .runt_o     (runt_o)
+        .runt_o     (runt_o),
+        .emitted_o  (fcs_emitted)
     );
 
     // An overflow-terminated frame reaches the FCS check with tuser set, so it reports
@@ -164,24 +181,72 @@ module eth_rx #(
         rx_err_o     = fcs_rx_err && !ovf_q;
     end
 
-    frame_buffer #(
-        .ADDR_W    (BUF_ADDR_W),
-        .MAX_FRAME (MAX_FRAME)
-    ) u_buf (
-        .clk_i      (clk_i),
-        .rst_i      (rst_i),
-        .s_tdata_i  (c_tdata),
-        .s_tvalid_i (c_tvalid),
-        .s_tready_o (c_tready),
-        .s_tlast_i  (c_tlast),
-        .s_tuser_i  (c_tuser),
-        .m_tdata_o  (m_tdata_o),
-        .m_tvalid_o (m_tvalid_o),
-        .m_tready_i (m_tready_i),
-        .m_tlast_o  (m_tlast_o),
-        .frame_ok_o (frame_ok_o),
-        .oversize_o (oversize_o)
-    );
+    if (!CUT_THROUGH) begin : g_store_forward
+        frame_buffer #(
+            .ADDR_W    (BUF_ADDR_W),
+            .MAX_FRAME (MAX_FRAME)
+        ) u_buf (
+            .clk_i      (clk_i),
+            .rst_i      (rst_i),
+            .s_tdata_i  (c_tdata),
+            .s_tvalid_i (c_tvalid),
+            .s_tready_o (c_tready),
+            .s_tlast_i  (c_tlast),
+            .s_tuser_i  (c_tuser),
+            .m_tdata_o  (m_tdata_o),
+            .m_tvalid_o (m_tvalid_o),
+            .m_tready_i (m_tready_i),
+            .m_tlast_o  (m_tlast_o),
+            .frame_ok_o (frame_ok_o),
+            .oversize_o (oversize_o)
+        );
+        assign m_tuser_o = 1'b0;
+        assign emitted_o = frame_ok_o;
+        logic unused_ct;
+        assign unused_ct = &{1'b0, fcs_ok, fcs_emitted};
+    end else begin : g_cut_through
+        // Oversize (frame_buffer's job in store-and-forward): more than MAX_FRAME bytes
+        // after the FCS, i.e. more than MAX_FRAME + 4 beats into the FCS check. Judged
+        // at the tlast beat, registered to line up with the FCS check's status, and held
+        // on the output tlast beat until it leaves.
+        localparam int LEN_W = $clog2(MAX_FRAME + 6);
+        logic [LEN_W-1:0] in_cnt_q;   // beats of this frame into the FCS check, saturating
+        logic             long_q;     // status cycle: the frame just judged was too long
+        logic             over_hold_q;
+        logic             in_fire;
+
+        always_comb in_fire = f_tvalid && f_tready;
+
+        always_ff @(posedge clk_i) begin
+            if (rst_i) begin
+                in_cnt_q    <= '0;
+                long_q      <= 1'b0;
+                over_hold_q <= 1'b0;
+            end else begin
+                long_q <= in_fire && f_word[8] && in_cnt_q >= LEN_W'(MAX_FRAME + 4);
+                if (in_fire) begin
+                    if (f_word[8])                                in_cnt_q <= '0;
+                    else if (in_cnt_q != LEN_W'(MAX_FRAME + 5))   in_cnt_q <= in_cnt_q + 1'b1;
+                end
+                // hold only while the tlast beat waits: on its accept cycle the verdict
+                // is applied combinationally, and the hold must not reach the next frame
+                if (m_tvalid_o && m_tready_i && m_tlast_o) over_hold_q <= 1'b0;
+                else if (long_q && fcs_ok)                  over_hold_q <= 1'b1;
+            end
+        end
+
+        always_comb begin
+            m_tdata_o  = c_tdata;
+            m_tvalid_o = c_tvalid;
+            m_tlast_o  = c_tlast;
+            c_tready   = m_tready_i;
+            // fcs_ok and long_q come on the cycle the tlast beat becomes valid
+            m_tuser_o  = c_tuser || (c_tlast && (over_hold_q || (long_q && fcs_ok)));
+            frame_ok_o = fcs_ok && !long_q;
+            oversize_o = fcs_ok && long_q;  // a frame already bad keeps that status
+            emitted_o  = fcs_emitted;
+        end
+    end
 
 `ifndef SYNTHESIS
     always_ff @(posedge clk_i) begin

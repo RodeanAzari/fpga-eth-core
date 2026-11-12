@@ -131,7 +131,7 @@ module udp_echo_top #(
     logic             e_ok, e_crc, e_rxerr, e_runt, e_over, e_ovf;
     logic [7:0]       e_ovf_frames;
     logic [FIFO_AW:0] fifo_level;
-    logic             sfd_unused;
+    logic             sfd_unused, tuser_unused, emitted_unused;  // store-and-forward
 
     eth_rx #(
         .FIFO_ADDR_W (FIFO_AW)
@@ -148,6 +148,7 @@ module udp_echo_top #(
         .m_tvalid_o   (f_tvalid),
         .m_tready_i   (f_tready),
         .m_tlast_o    (f_tlast),
+        .m_tuser_o    (tuser_unused),
         .frame_ok_o   (e_ok),
         .crc_err_o    (e_crc),
         .rx_err_o     (e_rxerr),
@@ -155,6 +156,7 @@ module udp_echo_top #(
         .oversize_o   (e_over),
         .ovf_o        (e_ovf),
         .ovf_frames_o (e_ovf_frames),
+        .emitted_o    (emitted_unused),
         .fifo_level_o (fifo_level)
     );
 

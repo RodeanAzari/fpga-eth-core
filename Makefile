@@ -7,13 +7,15 @@ RTL := $(wildcard rtl/*.sv)
 EX_RX := $(wildcard examples/rx_stats/*.sv examples/rx_stats/xilinx/*.sv) $(wildcard tb/models/*.sv)
 EX_ECHO := $(filter-out examples/rx_stats/rx_stats_top.sv,$(EX_RX)) examples/udp_echo/udp_echo_top.sv
 
-.PHONY: lint formal sim host host-test ci example example-echo clean
+.PHONY: lint formal sim host host-test ci example example-ct example-echo clean
 
 lint:
 	@for f in $(RTL); do \
 	  verilator --lint-only -Wall --assert $(RTL) --top-module $$(basename $$f .sv) || exit 1; \
 	done
+	verilator --lint-only -Wall --assert $(RTL) --top-module eth_rx -GCUT_THROUGH=1
 	verilator --lint-only -Wall --assert $(RTL) $(EX_RX) --top-module rx_stats_top
+	verilator --lint-only -Wall --assert $(RTL) $(EX_RX) --top-module rx_stats_top -GCUT_THROUGH=1
 	verilator --lint-only -Wall --assert $(RTL) $(EX_ECHO) --top-module udp_echo_top
 
 formal:
@@ -37,6 +39,9 @@ ci: lint formal sim host-test
 # in docs/reports/<example>/; no bitstream unless timing is met and CDC is clean.
 example:
 	vivado -mode batch -nojournal -log build/vivado_rx_stats.log -source syn/build_example.tcl -tclargs rx_stats
+
+example-ct:
+	vivado -mode batch -nojournal -log build/vivado_rx_stats_ct.log -source syn/build_example.tcl -tclargs rx_stats xc7a100tcsg324-1 ct
 
 example-echo:
 	vivado -mode batch -nojournal -log build/vivado_udp_echo.log -source syn/build_example.tcl -tclargs udp_echo

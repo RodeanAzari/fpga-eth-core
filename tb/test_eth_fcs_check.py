@@ -50,14 +50,14 @@ async def _run(dut, name: str, frames: list[tuple[bytes, int, str]],
             await RisingEdge(dut.clk_i)
             hits = [s for s in STATUS if int(getattr(dut, s).value)]
             assert len(hits) <= 1, f"{name}: two status pulses at once {hits}"
-            if hits:
-                st_sb.observe(hits[0])
+            if hits:  # emitted_o: did this frame put a beat on m_* (cut-through consumers)
+                st_sb.observe((hits[0], int(dut.emitted_o.value)))
 
     cocotb.start_soon(watch_status())
 
     n_out = 0
     for wire, err, status in frames:
-        st_sb.expect(status)
+        st_sb.expect((status, int(len(wire) > 4)))
         if len(wire) > 4:  # 4 bytes or fewer carry no payload: no output beats
             out_sb.expect((wire[:-4], int(status != "frame_ok_o")))
             n_out += 1

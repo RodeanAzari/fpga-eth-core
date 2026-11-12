@@ -42,7 +42,9 @@ module rx_stats_top #(
     parameter int          LINK_POLL_CYCLES = CLK_HZ / 100,       // 10 ms
     parameter logic [47:0] OWN_MAC          = 48'h02_00_0A_0B_0C_0D,
     parameter logic [31:0] GROUP_IP         = 32'hEF_01_01_01,    // 239.1.1.1
-    parameter logic [15:0] UDP_PORT         = 16'd26400
+    parameter logic [15:0] UDP_PORT         = 16'd26400,
+    parameter bit          CUT_THROUGH      = 1'b0  // eth_rx mode; udp_ok then also counts
+                                                    // datagrams of frames that fail later
 ) (
     input  wire logic       CLK100MHZ,
     input  wire logic       ck_rst,        // active low
@@ -132,10 +134,11 @@ module rx_stats_top #(
     logic             e_ok, e_crc, e_rxerr, e_runt, e_over, e_ovf;
     logic [7:0]       e_ovf_frames;
     logic [FIFO_AW:0] fifo_level;
-    logic             sfd_unused;
+    logic             sfd_unused, tuser_unused, emitted_unused;  // counted by the statuses
 
     eth_rx #(
-        .FIFO_ADDR_W (FIFO_AW)
+        .FIFO_ADDR_W (FIFO_AW),
+        .CUT_THROUGH (CUT_THROUGH)
     ) u_eth_rx (
         .mii_clk_i    (eth_rx_clk),
         .mii_rst_i    (mii_rst),
@@ -149,6 +152,7 @@ module rx_stats_top #(
         .m_tvalid_o   (f_tvalid),
         .m_tready_i   (f_tready),
         .m_tlast_o    (f_tlast),
+        .m_tuser_o    (tuser_unused),
         .frame_ok_o   (e_ok),
         .crc_err_o    (e_crc),
         .rx_err_o     (e_rxerr),
@@ -156,6 +160,7 @@ module rx_stats_top #(
         .oversize_o   (e_over),
         .ovf_o        (e_ovf),
         .ovf_frames_o (e_ovf_frames),
+        .emitted_o    (emitted_unused),
         .fifo_level_o (fifo_level)
     );
 

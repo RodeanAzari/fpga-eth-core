@@ -3,6 +3,12 @@
 Releases are tagged only after their gate test passes (see `~/fpga-coord/dependencies.toml`).
 
 ## Unreleased
+- `eth_rx`: new parameter `CUT_THROUGH` (default 0: unchanged) and two new outputs,
+  `m_tuser_o` (cut-through: bad frame, on tlast; else 0) and `emitted_o` (valid with every
+  status pulse: the frame put a beat on `m_*`; store-and-forward: = `frame_ok_o`).
+  `eth_fcs_check` gains `emitted_o`. Consumers: connect the two new outputs (or leave
+  them unused); nothing else changes. README: Receive section. `rx_stats` example gains
+  a `CUT_THROUGH` parameter; `make example-ct` builds it.
 - MIT license added (`LICENSE`). No RTL or interface change; consumers need do nothing.
 - New `rtl/mdio_link_mon.sv`: MDIO (clause 22) BMSR poller with a debounced `link_up_o`
   and `phy_ok_o` (the PHY answered). The examples now hold the MAC in reset until link up
