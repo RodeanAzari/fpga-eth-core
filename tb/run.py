@@ -32,6 +32,13 @@ TESTS = {
          {"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12, "CUT_THROUGH": 1},
          {"FIFO_ADDR_W": 4, "BUF_ADDR_W": 11, "CUT_THROUGH": 1}],
     ),
+    # fpga-coord 0005: rx_clk stopped across a MAC reset (store-and-forward, real depth)
+    "test_eth_rx_reset": (
+        "eth_rx",
+        ["rtl/mii_rx.sv", "rtl/rx_ovf_guard.sv", "rtl/async_fifo.sv", "rtl/crc32_d8.sv",
+         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/eth_rx.sv"],
+        [{"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12, "CUT_THROUGH": 0}],
+    ),
     "test_udp_rx": ("udp_rx", ["rtl/udp_rx.sv"], [{}]),
     "test_mdio_link_mon": (
         "mdio_link_mon",
@@ -71,11 +78,14 @@ TESTS = {
           "MDC_HZ": 125_000, "LINK_POLL_CYCLES": 600}],
     ),
 }
+# Reproductions of open bugs: run only by name, assertions non-fatal (the FIFO's own SVA
+# fires by design there). fpga-coord 0005: until the v0.4 fix.
+REPRO = {"test_eth_rx_reset"}
 
 
 def main(names: list[str]) -> int:
     failed = 0
-    for name in names or list(TESTS):
+    for name in names or [t for t in TESTS if t not in REPRO]:
         top, srcs, param_sets = TESTS[name]
         for params in param_sets:
             tag = "_".join(f"{k}{v}" for k, v in params.items()) or "default"
@@ -99,6 +109,7 @@ def main(names: list[str]) -> int:
                 test_module=name,
                 test_dir=ROOT / "tb",
                 build_dir=build_dir,
+                plusargs=["+verilator+error+limit+1000000"] if name in REPRO else [],
             )
             from cocotb_tools.runner import get_results
 
