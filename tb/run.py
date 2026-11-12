@@ -26,17 +26,17 @@ TESTS = {
     "test_eth_rx": (
         "eth_rx",
         ["rtl/mii_rx.sv", "rtl/rx_ovf_guard.sv", "rtl/async_fifo.sv", "rtl/crc32_d8.sv",
-         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/eth_rx.sv"],
+         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/rx_reset_bridge.sv", "rtl/eth_rx.sv"],
         [{"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12, "CUT_THROUGH": 0},
          {"FIFO_ADDR_W": 4, "BUF_ADDR_W": 11, "CUT_THROUGH": 0},
          {"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12, "CUT_THROUGH": 1},
          {"FIFO_ADDR_W": 4, "BUF_ADDR_W": 11, "CUT_THROUGH": 1}],
     ),
-    # fpga-coord 0005: rx_clk stopped across a MAC reset (store-and-forward, real depth)
+    # fpga-coord 0005 regression: rx_clk stopped across a MAC reset (real FIFO depth)
     "test_eth_rx_reset": (
         "eth_rx",
         ["rtl/mii_rx.sv", "rtl/rx_ovf_guard.sv", "rtl/async_fifo.sv", "rtl/crc32_d8.sv",
-         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/eth_rx.sv"],
+         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/rx_reset_bridge.sv", "rtl/eth_rx.sv"],
         [{"FIFO_ADDR_W": 11, "BUF_ADDR_W": 12, "CUT_THROUGH": 0}],
     ),
     "test_udp_rx": ("udp_rx", ["rtl/udp_rx.sv"], [{}]),
@@ -56,7 +56,7 @@ TESTS = {
          "examples/rx_stats/uart_tx.sv", "examples/rx_stats/stats_report.sv",
          "rtl/mdio_link_mon.sv",
          "rtl/mii_rx.sv", "rtl/rx_ovf_guard.sv", "rtl/async_fifo.sv", "rtl/crc32_d8.sv",
-         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/eth_rx.sv", "rtl/udp_rx.sv",
+         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/rx_reset_bridge.sv", "rtl/eth_rx.sv", "rtl/udp_rx.sv",
          "examples/rx_stats/rx_stats_top.sv"],
         # Tiny timing so the sim is short: 4 clocks per UART bit, 3 ms report period.
         [{"CLK_HZ": 1_000_000, "BAUD": 250_000, "REPORT_CYCLES": 300_000,
@@ -70,7 +70,7 @@ TESTS = {
          "examples/rx_stats/uart_tx.sv", "examples/rx_stats/stats_report.sv",
          "rtl/mdio_link_mon.sv",
          "rtl/mii_rx.sv", "rtl/rx_ovf_guard.sv", "rtl/async_fifo.sv", "rtl/crc32_d8.sv",
-         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/eth_rx.sv", "rtl/udp_rx.sv",
+         "rtl/eth_fcs_check.sv", "rtl/frame_buffer.sv", "rtl/rx_reset_bridge.sv", "rtl/eth_rx.sv", "rtl/udp_rx.sv",
          "rtl/udp_tx.sv", "rtl/mii_tx.sv", "rtl/eth_tx.sv",
          "examples/udp_echo/udp_echo_top.sv"],
         [{"CLK_HZ": 1_000_000, "BAUD": 250_000, "REPORT_CYCLES": 300_000,
@@ -79,8 +79,8 @@ TESTS = {
     ),
 }
 # Reproductions of open bugs: run only by name, assertions non-fatal (the FIFO's own SVA
-# fires by design there). fpga-coord 0005: until the v0.4 fix.
-REPRO = {"test_eth_rx_reset"}
+# fires by design there). Empty: fpga-coord 0005 is fixed (rx_reset_bridge).
+REPRO: set[str] = set()
 
 
 def main(names: list[str]) -> int:

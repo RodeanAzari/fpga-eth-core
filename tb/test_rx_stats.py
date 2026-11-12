@@ -115,7 +115,7 @@ async def mac_held_in_reset_while_link_down(dut):
     for _ in range(4000):
         await RisingEdge(dut.CLK100MHZ)
         assert int(dut.mac_rst_q.value) == 1 and int(dut.led[3].value) == 0
-    assert int(dut.mii_rst.value) == 1
+    assert int(dut.u_eth_rx.mii_rst.value) == 1
     assert int(dut.eth_rstn.value) == 1  # the PHY itself is out of reset meanwhile
 
     phy.set_link(True)
@@ -125,7 +125,7 @@ async def mac_held_in_reset_while_link_down(dut):
             break
     assert int(dut.mac_rst_q.value) == 0, "MAC never left reset with link up"
     await ClockCycles(dut.eth_rx_clk, 4)
-    assert int(dut.mii_rst.value) == 0
+    assert int(dut.u_eth_rx.mii_rst.value) == 0
 
     phy.set_link(False)
     for _ in range(600 + 512 + 10):
@@ -134,5 +134,5 @@ async def mac_held_in_reset_while_link_down(dut):
             break
     assert int(dut.mac_rst_q.value) == 1, "MAC stayed out of reset after link loss"
     await ClockCycles(dut.eth_rx_clk, 4)
-    assert int(dut.mii_rst.value) == 1
+    assert int(dut.u_eth_rx.mii_rst.value) == 1
     assert phy.errors == []

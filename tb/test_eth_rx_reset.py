@@ -9,10 +9,14 @@ from a reset synchronizer clocked by rx_clk, which can only change while rx_clk 
 the PHY stops rx_clk while the core side resets (link loss, PHY reset), the core side's
 read pointer returns to 0 and the write pointer does not.
 
-Here the rx-domain reset comes from a model of examples/rx_stats/reset_sync.sv (3 flops
-on rx_clk, starting asserted). The control run pulses the MAC reset with rx_clk running;
-the fault run stops rx_clk for the pulse. The contract: after a MAC reset the FIFO is
-empty and only the frames sent afterwards come out, each counted once.
+Before the fix (eth-core-v0.3 and earlier) this reproduced the fault: fifo_level_o
+3,193-3,262 on a 2,048 FIFO, and old frames out again as good (9 ok for 5 sent). Since
+rx_reset_bridge, eth_rx makes its own rx reset from rst_i and resets the FIFO's read side
+only inside the write side's reset. Checked with the old consumer wiring (mii_rst_i from
+a model of examples/rx_stats/reset_sync.sv: 3 flops on rx_clk, starting asserted) and
+the new (mii_rst_i tied 0), with rx_clk running and stopped across the reset. The
+contract: after a MAC reset the FIFO is empty and only the frames sent afterwards come
+out, each counted once; while rx_clk is stopped after a reset, in_reset_o stays high.
 """
 
 from __future__ import annotations
@@ -36,6 +40,7 @@ class Bench:
         self.mac_rst = 1  # the core-side reset request (rx_stats_top mac_rst_q)
         self.sync = [1] * STAGES  # reset_sync's flops: power-up asserted
         self.mii_clk = None
+        self.external = True  # mii_rst_i from a reset_sync model; False: tied 0
         self.hwm = 0
         self.ok = 0
 
@@ -51,7 +56,7 @@ class Bench:
         while True:
             await RisingEdge(self.dut.mii_clk_i)
             self.sync = [self.mac_rst, *self.sync[:-1]]
-            self.dut.mii_rst_i.value = self.sync[-1]
+            self.dut.mii_rst_i.value = self.sync[-1] if self.external else 0
 
     async def watch(self) -> None:
         dut = self.dut
@@ -66,9 +71,10 @@ class Bench:
         self.dut.rst_i.value = v
 
 
-async def run(dut, stop_clk: bool) -> tuple[int, int, list[bytes], list[bytes]]:
-    rng = get_rng(f"eth_rx_reset_{int(stop_clk)}")
+async def run(dut, stop_clk: bool, external: bool):
+    rng = get_rng(f"eth_rx_reset_{int(stop_clk)}{int(external)}")
     b = Bench(dut)
+    b.external = external
     cocotb.start_soon(Clock(dut.clk_i, 8, unit="ns").start())
     dut.mii_rst_i.value = 1
     b.set_mac_rst(1)
@@ -97,8 +103,11 @@ async def run(dut, stop_clk: bool) -> tuple[int, int, list[bytes], list[bytes]]:
     b.set_mac_rst(0)
     await Timer(2, unit="us")
     if stop_clk:
+        # the reset cannot complete without rx_clk: eth_rx says so and holds
+        assert int(dut.in_reset_o.value), "in_reset_o low while rx_clk is stopped"
         b.start_mii_clk()
     await ClockCycles(dut.mii_clk_i, 20)
+    assert not int(dut.in_reset_o.value), "in_reset_o still high 20 rx_clk after restart"
     # run 2: a few frames after the reset
     n_before_frames = len(sink.frames)
     b.ok, b.hwm = 0, 0
@@ -110,19 +119,31 @@ async def run(dut, stop_clk: bool) -> tuple[int, int, list[bytes], list[bytes]]:
     return b.hwm, b.ok, got, after
 
 
-@cocotb.test()
-async def mac_reset_with_rx_clk_running(dut):
-    """Control: a MAC reset while rx_clk runs leaves an empty FIFO; only new frames."""
-    hwm, ok, got, after = await run(dut, stop_clk=False)
-    assert hwm <= FIFO_DEPTH, f"fifo_level_o {hwm} > depth {FIFO_DEPTH}"
-    assert got == after and ok == len(after), f"{len(got)} frames out, {ok} ok"
-
-
-@cocotb.test(expect_fail=True)
-async def mac_reset_with_rx_clk_stopped(dut):
-    """0005: the same reset with rx_clk stopped. Expected to fail until the v0.4 fix: the
-    write pointer keeps its value, the read side sees words that were never written."""
-    hwm, ok, got, after = await run(dut, stop_clk=True)
+def check(hwm: int, ok: int, got: list[bytes], after: list[bytes]) -> None:
     seen = (f"fifo_level_o max {hwm} (depth {FIFO_DEPTH}), {len(got)} frames out, {ok} ok, "
             f"{sum(g in after for g in got)} of them sent after the reset (sent {len(after)})")
     assert hwm <= FIFO_DEPTH and got == after and ok == len(after), seen
+
+
+@cocotb.test()
+async def mac_reset_rx_clk_running_external_rst(dut):
+    """Old wiring, rx_clk running: unchanged behaviour."""
+    check(*await run(dut, stop_clk=False, external=True))
+
+
+@cocotb.test()
+async def mac_reset_rx_clk_stopped_external_rst(dut):
+    """0005: old wiring (a reset_sync on rx_clk that cannot move) with rx_clk stopped."""
+    check(*await run(dut, stop_clk=True, external=True))
+
+
+@cocotb.test()
+async def mac_reset_rx_clk_stopped_no_external_rst(dut):
+    """0005: new wiring (mii_rst_i tied 0) with rx_clk stopped."""
+    check(*await run(dut, stop_clk=True, external=False))
+
+
+@cocotb.test()
+async def mac_reset_rx_clk_running_no_external_rst(dut):
+    """New wiring, rx_clk running."""
+    check(*await run(dut, stop_clk=False, external=False))

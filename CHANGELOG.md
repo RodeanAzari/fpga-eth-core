@@ -3,6 +3,15 @@
 Releases are tagged only after their gate test passes (see `~/fpga-coord/dependencies.toml`).
 
 ## Unreleased
+- **fpga-coord 0005 fix (for `eth-core-v0.4`):** new `rtl/rx_reset_bridge.sv` inside
+  `eth_rx`: the rx_clk-domain reset is made from `rst_i`, and the async FIFO's read side
+  resets only while its write side is in reset, so a reset while RX_CLK is stopped no
+  longer leaves the write pointer behind (that showed `fifo_level_o` above the depth and
+  re-delivered old frames as good). New output `in_reset_o` (high until a reset made
+  without RX_CLK completes). Consumers: add the file and `constr/rx_reset_bridge.xdc`
+  (`read_xdc -ref rx_reset_bridge`), tie `mii_rst_i` to 0 (still accepted as an extra
+  rx-side reset), connect or ignore `in_reset_o`. `tb/test_eth_rx_reset.py`: 4 cases
+  (old and new wiring, RX_CLK running and stopped); 3/3 injected bridge bugs caught.
 - `eth_rx`: new parameter `CUT_THROUGH` (default 0: unchanged) and two new outputs,
   `m_tuser_o` (cut-through: bad frame, on tlast; else 0) and `emitted_o` (valid with every
   status pulse: the frame put a beat on `m_*`; store-and-forward: = `frame_ok_o`).

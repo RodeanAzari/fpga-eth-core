@@ -83,7 +83,7 @@ module udp_echo_top #(
 
     logic [START_W-1:0] start_q;
     logic               link_up, phy_ok_unused, mdio_o, mdio_oe;
-    logic               mac_rst_q, mii_rx_rst, mii_tx_rst;
+    logic               mac_rst_q, mii_tx_rst;
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -96,12 +96,6 @@ module udp_echo_top #(
             mac_rst_q <= start_q != START_W'(MAC_START_CYCLES) || !link_up;
         end
     end
-
-    reset_sync u_rst_mii_rx (
-        .clk_i     (eth_rx_clk),
-        .rst_req_i (mac_rst_q),
-        .rst_o     (mii_rx_rst)
-    );
 
     reset_sync u_rst_mii_tx (
         .clk_i     (eth_tx_clk),
@@ -131,19 +125,20 @@ module udp_echo_top #(
     logic             e_ok, e_crc, e_rxerr, e_runt, e_over, e_ovf;
     logic [7:0]       e_ovf_frames;
     logic [FIFO_AW:0] fifo_level;
-    logic             sfd_unused, tuser_unused, emitted_unused;  // store-and-forward
+    logic             sfd_unused, tuser_unused, emitted_unused, eth_in_reset_unused;  // store-and-forward
 
     eth_rx #(
         .FIFO_ADDR_W (FIFO_AW)
     ) u_eth_rx (
         .mii_clk_i    (eth_rx_clk),
-        .mii_rst_i    (mii_rx_rst),
+        .mii_rst_i    (1'b0),  // eth_rx makes its rx reset from rst_i (0005)
         .mii_rxd_i    (eth_rxd),
         .mii_rx_dv_i  (eth_rx_dv),
         .mii_rx_er_i  (eth_rxerr),
         .sfd_o        (sfd_unused),
         .clk_i        (clk),
         .rst_i        (mac_rst_q),
+        .in_reset_o   (eth_in_reset_unused),
         .m_tdata_o    (f_tdata),
         .m_tvalid_o   (f_tvalid),
         .m_tready_i   (f_tready),

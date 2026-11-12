@@ -35,9 +35,12 @@
 // sfd_o: T0 event, a one-cycle pulse in the rx_clk domain; the consumer synchronizes it.
 //
 // Clocks and resets: mii_clk_i is the PHY's rx_clk; clk_i is the core clock (must be
-// faster than 12.5 MHz byte rate, typically 100-125 MHz). mii_rst_i and rst_i are
-// synchronous, active-high, each from a reset synchronizer in its own domain, fed by the
-// same source (async_fifo requirement).
+// faster than 12.5 MHz byte rate, typically 100-125 MHz). rst_i (core, synchronous,
+// active-high) resets the whole block: rx_reset_bridge makes the rx_clk-domain reset
+// from it and resets the async FIFO's read side only inside the write side's reset, so
+// a reset while rx_clk is stopped is safe (fpga-coord 0005). Such a reset completes when
+// rx_clk returns; in_reset_o is high until then. mii_rst_i (rx_clk domain) is an
+// optional extra rx-side reset (tie 0); an rx-side reset also resets the core side.
 //
 // Latency, store-and-forward (last FCS nibble at the pins -> first frame byte valid on
 // m_*): 2 rx_clk (mii_rx flush) + SYNC_STAGES+1 core (FIFO) + 1 (fcs check) + 2 (buffer)
@@ -60,6 +63,7 @@ module eth_rx #(
     // core domain
     input  wire logic       clk_i,
     input  wire logic       rst_i,
+    output logic            in_reset_o,    // eth_rx in reset (or waiting for rx_clk)
     output logic [7:0]      m_tdata_o,
     output logic            m_tvalid_o,
     input  wire logic       m_tready_i,
@@ -77,13 +81,27 @@ module eth_rx #(
 );
     localparam int USER_OVF_BIT = 1;  // rx_ovf_guard: tuser[1] marks an abort beat
 
+    // ------------------------------------------------------------------- resets
+    logic mii_rst, fifo_rd_rst, rst;
+
+    rx_reset_bridge u_rst (
+        .clk_i         (clk_i),
+        .rst_i         (rst_i),
+        .mii_clk_i     (mii_clk_i),
+        .mii_rst_i     (mii_rst_i),
+        .mii_rst_o     (mii_rst),
+        .fifo_rd_rst_o (fifo_rd_rst),
+        .core_rst_o    (rst)
+    );
+    assign in_reset_o = rst;
+
     // ---------------------------------------------------------------- rx_clk domain
     logic [7:0] mii_tdata;
     logic       mii_tvalid, mii_tlast, mii_tuser;
 
     mii_rx u_mii_rx (
         .clk_i       (mii_clk_i),
-        .rst_i       (mii_rst_i),
+        .rst_i       (mii_rst),
         .mii_rxd_i   (mii_rxd_i),
         .mii_rx_dv_i (mii_rx_dv_i),
         .mii_rx_er_i (mii_rx_er_i),
@@ -100,7 +118,7 @@ module eth_rx #(
 
     rx_ovf_guard u_guard (
         .clk_i      (mii_clk_i),
-        .rst_i      (mii_rst_i),
+        .rst_i      (mii_rst),
         .s_tdata_i  (mii_tdata),
         .s_tvalid_i (mii_tvalid),
         .s_tlast_i  (mii_tlast),
@@ -122,13 +140,13 @@ module eth_rx #(
         .ADDR_W (FIFO_ADDR_W)
     ) u_fifo (
         .wr_clk_i   (mii_clk_i),
-        .wr_rst_i   (mii_rst_i),
+        .wr_rst_i   (mii_rst),
         .s_tdata_i  ({g_tuser, g_tlast, g_tdata}),
         .s_tvalid_i (g_tvalid),
         .s_tready_o (g_tready),
         .wr_level_o (f_wr_level_unused),
         .rd_clk_i   (clk_i),
-        .rd_rst_i   (rst_i),
+        .rd_rst_i   (fifo_rd_rst),
         .m_tdata_o  (f_word),
         .m_tvalid_o (f_tvalid),
         .m_tready_i (f_tready),
@@ -146,7 +164,7 @@ module eth_rx #(
         .MIN_FRAME (MIN_FRAME)
     ) u_fcs (
         .clk_i      (clk_i),
-        .rst_i      (rst_i),
+        .rst_i      (rst),
         .s_tdata_i  (f_word[7:0]),
         .s_tvalid_i (f_tvalid),
         .s_tready_o (f_tready),
@@ -167,7 +185,7 @@ module eth_rx #(
     // An overflow-terminated frame reaches the FCS check with tuser set, so it reports
     // rx_err one cycle after its tlast is accepted. Re-label that pulse as ovf.
     always_ff @(posedge clk_i) begin
-        if (rst_i) begin
+        if (rst) begin
             ovf_q <= 1'b0;
         end else begin
             ovf_q <= f_tvalid && f_tready && f_word[8] && f_word[9 + USER_OVF_BIT];
@@ -187,7 +205,7 @@ module eth_rx #(
             .MAX_FRAME (MAX_FRAME)
         ) u_buf (
             .clk_i      (clk_i),
-            .rst_i      (rst_i),
+            .rst_i      (rst),
             .s_tdata_i  (c_tdata),
             .s_tvalid_i (c_tvalid),
             .s_tready_o (c_tready),
@@ -218,7 +236,7 @@ module eth_rx #(
         always_comb in_fire = f_tvalid && f_tready;
 
         always_ff @(posedge clk_i) begin
-            if (rst_i) begin
+            if (rst) begin
                 in_cnt_q    <= '0;
                 long_q      <= 1'b0;
                 over_hold_q <= 1'b0;
@@ -250,7 +268,7 @@ module eth_rx #(
 
 `ifndef SYNTHESIS
     always_ff @(posedge clk_i) begin
-        if (!rst_i) assert (!(ovf_q && !fcs_rx_err));  // the re-label lines up
+        if (!rst) assert (!(ovf_q && !fcs_rx_err));  // the re-label lines up
     end
 `endif
 endmodule

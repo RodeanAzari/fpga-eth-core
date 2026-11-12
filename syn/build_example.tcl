@@ -50,6 +50,7 @@ set sv [concat \
 read_verilog -sv $sv
 foreach x $xdcs { read_xdc $x }
 read_xdc -ref async_fifo [file join $repo constr async_fifo.xdc]
+read_xdc -ref rx_reset_bridge [file join $repo constr rx_reset_bridge.xdc]
 
 if {$ct} {
     synth_design -top $top -part $part -generic CUT_THROUGH=1

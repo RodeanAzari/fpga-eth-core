@@ -108,24 +108,29 @@ Add every file in `rtl/` to your build. For constraints:
 
 ### Resets
 
-Each domain takes a synchronous, active-high reset from its own reset synchronizer,
-and all of them are fed by the same source. Both sides of an async FIFO must be in reset
-together. Hold the MAC in reset until the PHY clocks are running, because a domain whose
-clock is absent cannot leave reset.
+Every reset is synchronous and active-high. **`eth_rx` needs only `rst_i`** (core domain):
+it makes its own rx_clk-domain reset (`rx_reset_bridge`) and resets the async FIFO's
+read side only while its write side is in reset, so a reset is safe whatever the PHY's
+RX_CLK does. A reset made while RX_CLK is stopped (PHY in reset, link loss, a PHY that
+gates its clock) completes when RX_CLK returns; `in_reset_o` stays high until then.
+Tie `mii_rst_i` to 0 (it is an optional extra rx-side reset). Read the scoped
+constraints `constr/rx_reset_bridge.xdc` (`read_xdc -ref rx_reset_bridge`) next to
+`async_fifo.xdc`.
 
-**Hold the MAC in reset while the link is down.** The PHY's RX_CLK changes source when it
-locks to the link partner. On the Arty, a MAC already out of reset at that moment has come
-up with a corrupted RX FIFO (fpga-coord request 0005, seen on slow link-ups). Instantiate
-`mdio_link_mon` and OR `!link_up_o` into the MAC reset source. `link_up_o` rises 10–20 ms
-after the PHY reports link, and it falls on the first poll that sees a loss (BMSR's link
-bit is latched-low), so the MAC also goes back into reset on link loss. Drive the pad as
-`eth_mdio = mdio_oe_o ? mdio_o : 'z` and set `PHY_ADDR` (Arty: 1). If `phy_ok_o` stays 0,
-no PHY answered at that address. Independently, `fifo_level_o > 2**FIFO_ADDR_W` can
-never happen in a healthy FIFO; treat it as corruption and reset the MAC.
+Why (fpga-coord request 0005): before this, the rx-domain reset came from a reset
+synchronizer on RX_CLK, which cannot move while RX_CLK is stopped. A core-side reset in
+that window reset the FIFO's read pointer and not its write pointer: `fifo_level_o` above
+the depth, and old frames delivered again with a good FCS. `tb/test_eth_rx_reset.py`
+reproduces it on the old wiring and checks the fix on both wirings.
 
-The examples release the PHY reset at 10 ms and then hold the MAC in reset until both
-200 ms have passed and the link is up (`examples/udp_echo/udp_echo_top.sv`,
-`examples/rx_stats/reset_sync.sv`).
+`eth_tx` still takes `mii_rst_i` from your synchronizer on TX_CLK: hold its domains in
+reset together, with TX_CLK running (its FIFO has the same requirement; not yet bridged).
+
+`mdio_link_mon` (optional) reports the PHY's link: `link_up_o` rises 10-20 ms after the
+PHY reports link and falls on the first poll that sees a loss (BMSR's link bit is
+latched-low). Drive the pad as `eth_mdio = mdio_oe_o ? mdio_o : 'z` and set `PHY_ADDR`
+(Arty: 1); if `phy_ok_o` stays 0, no PHY answered. The examples hold the MAC in reset
+until 200 ms after start and the link is up (`examples/udp_echo/udp_echo_top.sv`).
 
 ### Receive: `eth_rx` + `udp_rx`
 
@@ -189,7 +194,7 @@ reference: clocks, reset sequencing, RX, TX, counters over UART. The datapath pa
 just this:
 
 ```systemverilog
-eth_rx u_eth_rx (.mii_clk_i(eth_rx_clk), .mii_rst_i(mii_rx_rst), .mii_rxd_i(eth_rxd),
+eth_rx u_eth_rx (.mii_clk_i(eth_rx_clk), .mii_rst_i(1'b0), .mii_rxd_i(eth_rxd),
                  .mii_rx_dv_i(eth_rx_dv), .mii_rx_er_i(eth_rxerr), .clk_i(clk), .rst_i(rst),
                  .m_tdata_o(f_tdata), .m_tvalid_o(f_tvalid), .m_tready_i(f_tready),
                  .m_tlast_o(f_tlast), /* status outputs */ ...);
@@ -383,7 +388,8 @@ critical CDC violation exists.
 - **`eth-core-v0.3`:** `eth_rx` cut-through option (default unchanged), checked in both
   modes in simulation and with `rx_stats` built cut-through: ≥ 10 minutes on the board,
   zero drops. Includes `mdio_link_mon`, not yet shown to fix fpga-coord 0005.
-- **`eth-core-v0.4`:** the fix for fpga-coord 0005, once a hardware test shows it.
+- **`eth-core-v0.4`:** the fix for fpga-coord 0005 (`rx_reset_bridge`; reproduced and fixed in
+  simulation), released once a hardware test shows it.
 - After that: changes only through requests from consuming projects, each a new tag
   with a CHANGELOG note on what consumers must change.
 
