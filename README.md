@@ -61,8 +61,9 @@ flowchart LR
 ```
 
 - **Three clock domains:** the PHY's rx_clk, the PHY's tx_clk and your core clock. The
-  only crossings are two Gray-pointer async FIFOs and one toggle synchronizer (the TX
-  underrun flag), each constrained in XDC.
+  only crossings are two Gray-pointer async FIFOs, one toggle synchronizer (the TX
+  underrun flag) and `eth_rx`'s reset request/acknowledge pair (two 1-bit levels into
+  3-flop ASYNC_REG chains), each constrained in XDC.
 - **Store-and-forward on RX:** a frame reaches `udp_rx` only after its FCS checks, so
   no byte of a bad frame ever leaves the core.
 - **Store-and-forward on TX:** `udp_tx` buffers a whole payload before sending, because

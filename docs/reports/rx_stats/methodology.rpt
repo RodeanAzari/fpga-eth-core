@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2025.2 (lin64) Build 6299465 Fri Nov 14 12:34:56 MST 2025
-| Date         : Thu Nov  5 11:48:07 2026
+| Date         : Thu Nov 12 13:32:24 2026
 | Host         : RodeanStation running 64-bit Ubuntu 26.04 LTS
 | Command      : report_methodology -file /home/rodea/fpga-eth-core/docs/reports/rx_stats/methodology.rpt
 | Design       : rx_stats_top
@@ -34,7 +34,7 @@ Table of Contents
 -----------------
 SYNTH-6#1 Warning
 Timing of a RAM block might be sub-optimal  
-The timing for the instance u_eth_rx/u_buf/mem_reg, implemented as a RAM block, might be sub-optimal as no output register was merged into the block.
+The timing for the instance u_eth_rx/g_store_forward.u_buf/mem_reg, implemented as a RAM block, might be sub-optimal as no output register was merged into the block.
 Related violations: <none>
 
 SYNTH-6#2 Warning
