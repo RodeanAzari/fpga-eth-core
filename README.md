@@ -13,7 +13,10 @@ submodule at release tags:
 designs build in Vivado with timing met at 125 MHz. The RX hardware gate passed on
 2026-11-05: 10 minutes at 98.4 Mbit/s with zero drops ([evidence](data/results/2026-11-05_v0.1_rx_stats_sustained.md)). The TX
 gate followed: 9,000,000 echoes of 1–1,472 B, every one intact, at 96.3 Mbit/s each way
-([evidence](data/results/2026-11-05_v0.2_udp_echo_sustained.md)). Released: `eth-core-v0.1` (RX) and `eth-core-v0.2` (TX).
+([evidence](data/results/2026-11-05_v0.2_udp_echo_sustained.md)). Cut-through RX passed on
+2026-11-12: 4,879,984 of 4,880,000 delivered, 0 errors; the 16 others were dropped by the host's
+USB adapter before the wire ([evidence](data/results/2026-11-12_v0.3_rx_stats_ct_sustained.md)).
+Released: `eth-core-v0.1` (RX), `eth-core-v0.2` (TX) and `eth-core-v0.3` (cut-through RX).
 
 Every number below comes from a committed report in [`docs/reports/`](docs/reports/),
 produced by `make example` / `make example-echo`, or from a test run by `make ci`.
@@ -323,6 +326,7 @@ with a `key=value` summary for results files.
 | Clock crossings | All "Max Delay Datapath Only", 0 critical warnings | both examples | [clock_interaction.rpt](docs/reports/udp_echo/clock_interaction.rpt) |
 | Sustained RX, zero drops | 4,880,000 sent, 4,880,000 delivered, `ovf_lost` 0 | 610 s, 1,472 B payloads, 8,000/s = 98.4 Mbit/s on the wire | [CSV](data/results/2026-11-05_v0.1_rx_stats_sustained.csv), [notes](data/results/2026-11-05_v0.1_rx_stats_sustained.md) |
 | RX FIFO high-water mark | 1 byte of 2,048 (core-side view, may read 2–3 low) | same run | same |
+| Sustained RX, cut-through | 4,880,000 sent, 4,879,984 delivered, every RX error counter 0, FIFO high-water 1 B; the 16 missing were TX drops in the host's USB adapter (counted there) | 610 s at 8,000/s, `rx_stats` with `CUT_THROUGH = 1` (WNS +0.592 ns) | [CSV](data/results/2026-11-12_v0.3_run2_rx_stats_ct_sustained.csv), [notes](data/results/2026-11-12_v0.3_rx_stats_ct_sustained.md) |
 | TX echo, 1–1,472 B | 9,000,000 sent, 9,000,000 intact, 0 lost; every length ≥ 5,782 times | 600 s, 15,000/s = 96.3 Mbit/s each way, full duplex | [CSV](data/results/2026-11-05_v0.2_udp_echo_sustained.csv), [notes](data/results/2026-11-05_v0.2_udp_echo_sustained.md) |
 
 ## Limitations
@@ -388,7 +392,8 @@ critical CDC violation exists.
   echo checked.
 - **`eth-core-v0.3`:** `eth_rx` cut-through option (default unchanged), checked in both
   modes in simulation and with `rx_stats` built cut-through: ≥ 10 minutes on the board,
-  zero drops. Includes `mdio_link_mon`, not yet shown to fix fpga-coord 0005.
+  zero drops. Includes `mdio_link_mon`, not yet shown to fix fpga-coord 0005. Released
+  2026-11-13 (16 host-side drops accounted for; see the CHANGELOG).
 - **`eth-core-v0.4`:** the fix for fpga-coord 0005 (`rx_reset_bridge`; reproduced and fixed in
   simulation), released once a hardware test shows it.
 - After that: changes only through requests from consuming projects, each a new tag
@@ -398,7 +403,7 @@ critical CDC violation exists.
 
 | Project | What it is | Consumes |
 |---|---|---|
-| [fpga-itch-orderbook](https://github.com/RodeanAzari/fpga-itch-orderbook) (private) | NASDAQ ITCH 5.0 market data to a hardware order book on the Arty A7 | `eth-core-v0.2` (submodule `rtl/eth`) |
+| [fpga-itch-orderbook](https://github.com/RodeanAzari/fpga-itch-orderbook) (private) | NASDAQ ITCH 5.0 market data to a hardware order book on the Arty A7 | `eth-core-v0.3` (submodule `rtl/eth`) |
 | [ccsds-meteor-lrpt-receiver](https://github.com/RodeanAzari/ccsds-meteor-lrpt-receiver) (private) | CCSDS satellite telemetry receiver | `eth-core-v0.2`: `eth_rx`, `udp_rx`, `udp_tx`, `eth_tx` (submodule `rtl/eth`) |
 | [serdes-lab](https://github.com/RodeanAzari/serdes-lab) | Hardware noise histogram over UDP on the Arty A7 | `eth-core-v0.2`: `eth_rx`, `eth_tx`, `udp_rx`, `udp_tx`, constraints, example `clk_gen`/`reset_sync` (submodule `rtl/eth`) |
 
