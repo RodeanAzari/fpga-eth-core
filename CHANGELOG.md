@@ -2,7 +2,26 @@
 
 Releases are tagged only after their gate test passes (see `~/fpga-coord/dependencies.toml`).
 
-## Unreleased
+## eth-core-v0.3 — 2026-11-13
+- Gate (`dependencies.toml`): `eth_rx` CUT_THROUGH option (default unchanged); `make ci`
+  with both modes in sim; `rx_stats` built cut-through, >= 10 min sustained stream on the
+  board with zero drops (every datagram received, every RX error counter 0).
+- Sim: `make ci` at this commit: lint clean (both modes), formal PASS, cocotb 47 passed,
+  0 failed, 2 skipped (`ct_status_order` does not apply to store-and-forward; it passes
+  in both cut-through configurations).
+- Hardware: `rx_stats` with `CUT_THROUGH=1` (WNS +0.592 ns) on the Arty A7-100T,
+  `udp_seq_send --pps 8000 --size 1472 --seconds 610` through the ASIX USB adapter.
+- Result: PASS with host-side drops accounted for (accepted by the maintainer).
+  4,880,000 sent, 4,879,984 received, every RX error counter 0, FIFO high-water mark
+  1 byte. The 16 missing datagrams are counted as TX drops by the host adapter's driver
+  before the wire (`ip -s link`, before and after), so received + host-dropped = sent.
+  An earlier run on a loaded host (17,535 host drops, same exact accounting) is recorded
+  alongside.
+- Evidence: `data/results/2026-11-12_v0.3_rx_stats_ct_sustained.md`, per-run CSVs,
+  sender summaries and host interface counters alongside.
+- Consumers: the new `eth_rx` outputs `m_tuser_o` and `emitted_o` (connect or leave
+  unused) and, for the examples' reset gating, `rtl/mdio_link_mon.sv` plus the `eth_mdio`
+  pin. Nothing else changes; `CUT_THROUGH` defaults to 0.
 - `eth_rx`: new parameter `CUT_THROUGH` (default 0: unchanged) and two new outputs,
   `m_tuser_o` (cut-through: bad frame, on tlast; else 0) and `emitted_o` (valid with every
   status pulse: the frame put a beat on `m_*`; store-and-forward: = `frame_ok_o`).
@@ -14,7 +33,8 @@ Releases are tagged only after their gate test passes (see `~/fpga-coord/depende
   and `phy_ok_o` (the PHY answered). The examples now hold the MAC in reset until link up
   and put it back in reset on link loss (fpga-coord request 0005). Consumers: add the file,
   add the `eth_mdio` pin (Arty K13), and gate the MAC reset as the README's Resets section
-  describes. Untagged until the 100-reprogram hardware run passes.
+  describes. Included in this tag; the 100-reprogram acceptance for fpga-coord 0005 is
+  still open (planned for `eth-core-v0.4`).
 
 ## eth-core-v0.2 — 2026-11-05
 - Gate (`dependencies.toml`): TX generic-payload echo test, lengths 1–1,472 B; host MAC/IP

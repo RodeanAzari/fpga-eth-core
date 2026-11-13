@@ -1,0 +1,12 @@
+13: enx8cae4caa0ec7: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo state UP mode DEFAULT group default qlen 1000
+    link/ether 8c:ae:4c:aa:0e:c7 brd ff:ff:ff:ff:ff:ff
+    RX:  bytes packets errors dropped  missed   mcast           
+             0       0      0       0       0       0 
+    TX:  bytes packets errors dropped carrier collsns           
+    7482892010 4942465      0   17535       0       0 
+13: enx8cae4caa0ec7: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo state UP mode DEFAULT group default qlen 1000
+    link/ether 8c:ae:4c:aa:0e:c7 brd ff:ff:ff:ff:ff:ff
+    RX:   bytes packets errors dropped  missed   mcast           
+              0       0      0       0       0       0 
+    TX:   bytes packets errors dropped carrier collsns           
+    14871187786 9822449      0   17551       0       0 
