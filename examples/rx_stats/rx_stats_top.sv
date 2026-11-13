@@ -28,6 +28,8 @@
 // time rx_clk from the PHY is running. ck_rst (red button) restarts everything.
 // MDIO: mdio_link_mon polls the PHY's link status; the MAC is held in reset while
 // the link is down and re-enters reset on link loss (fpga-coord request 0005).
+// LINK_GATE = 0 drops that gate (MAC start on MAC_START_CYCLES alone): a test setting
+// that, with PHY_RST_CYCLES > MAC_START_CYCLES, releases the MAC while rx_clk is stopped.
 // The transmit pins are held idle. Top-level ports use the Digilent master-XDC names.
 //
 // Configuration: OWN_MAC/GROUP_IP/UDP_PORT drive udp_rx's runtime cfg inputs from
@@ -40,6 +42,7 @@ module rx_stats_top #(
     parameter int          MAC_START_CYCLES = CLK_HZ / 5,         // 200 ms
     parameter int          MDC_HZ           = 2_500_000,          // MDIO clock
     parameter int          LINK_POLL_CYCLES = CLK_HZ / 100,       // 10 ms
+    parameter bit          LINK_GATE        = 1'b1,               // MAC waits for link up
     parameter logic [47:0] OWN_MAC          = 48'h02_00_0A_0B_0C_0D,
     parameter logic [31:0] GROUP_IP         = 32'hEF_01_01_01,    // 239.1.1.1
     parameter logic [15:0] UDP_PORT         = 16'd26400,
@@ -64,7 +67,9 @@ module rx_stats_top #(
 );
     localparam int N_FIELDS  = 15;
     localparam int FIFO_AW   = 11;
-    localparam int START_W   = $clog2(MAC_START_CYCLES + 1);
+    localparam int START_END = PHY_RST_CYCLES > MAC_START_CYCLES ? PHY_RST_CYCLES
+                                                                : MAC_START_CYCLES;
+    localparam int START_W   = $clog2(START_END + 1);
     localparam int REPORT_W  = $clog2(REPORT_CYCLES);
     localparam int LED_HOLD  = CLK_HZ / 30;  // ~33 ms activity flash
     localparam int LED_W     = $clog2(LED_HOLD + 1);
@@ -97,9 +102,9 @@ module rx_stats_top #(
             eth_rstn  <= 1'b0;
             mac_rst_q <= 1'b1;
         end else begin
-            if (start_q != START_W'(MAC_START_CYCLES)) start_q <= start_q + START_W'(1);
+            if (start_q != START_W'(START_END)) start_q <= start_q + START_W'(1);
             eth_rstn  <= start_q >= START_W'(PHY_RST_CYCLES);
-            mac_rst_q <= start_q != START_W'(MAC_START_CYCLES) || !link_up;
+            mac_rst_q <= start_q < START_W'(MAC_START_CYCLES) || (LINK_GATE && !link_up);
         end
     end
 

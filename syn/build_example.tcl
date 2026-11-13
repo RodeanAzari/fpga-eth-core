@@ -5,6 +5,9 @@
 # Non-project flow; nothing but build/ is written, except the reports copied to
 # docs/reports/<example>/ for committing. The bitstream is written only if every timing
 # path meets and no clock-domain crossing is unconstrained.
+# Test builds: EXAMPLE_GENERICS="NAME=VALUE ..." sets top-level parameters (e.g. the
+# fpga-coord 0005 reset tests); output goes to build/<example>_test/, reports included,
+# and docs/reports/ is not touched.
 
 set expected_vivado 2025.2
 if {[version -short] ne $expected_vivado} {
@@ -36,8 +39,15 @@ switch -- $example {
     default { error "unknown example '$example' (rx_stats | udp_echo)" }
 }
 set tag     [expr {$ct ? "${example}_ct" : $example}]
+set generics {}
+if {[info exists ::env(EXAMPLE_GENERICS)] && $::env(EXAMPLE_GENERICS) ne ""} {
+    foreach g $::env(EXAMPLE_GENERICS) { lappend generics -generic $g }
+    append tag _test
+}
+if {$ct} { lappend generics -generic CUT_THROUGH=1 }
 set rundir  [file join $repo build $tag]
-set reports [file join $repo docs reports $tag]
+set reports [expr {[string match *_test $tag] ? [file join $rundir reports] \
+                                              : [file join $repo docs reports $tag]}]
 file mkdir $rundir $reports
 cd $rundir
 
@@ -52,11 +62,7 @@ foreach x $xdcs { read_xdc $x }
 read_xdc -ref async_fifo [file join $repo constr async_fifo.xdc]
 read_xdc -ref rx_reset_bridge [file join $repo constr rx_reset_bridge.xdc]
 
-if {$ct} {
-    synth_design -top $top -part $part -generic CUT_THROUGH=1
-} else {
-    synth_design -top $top -part $part
-}
+synth_design -top $top -part $part {*}$generics
 set bb [get_cells -hier -quiet -filter {IS_BLACKBOX == 1}]
 if {[llength $bb] > 0} { error "black boxes in the netlist: $bb" }
 report_utilization -file [file join $rundir post_synth_util.rpt]

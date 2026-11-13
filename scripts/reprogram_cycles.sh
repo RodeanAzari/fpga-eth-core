@@ -12,6 +12,9 @@
 # Needs: vivado-env in ~/.bashrc, the board's FTDI attached (usbipd), the host on the cable
 # at IF_IP (default 192.168.10.1), build/host/udp_seq_send (make host). Programs with
 # openFPGALoader (SRAM, seconds; PROG=vivado uses Vivado batch + PROG_TCL, ~2 min per cycle).
+# PROG=dtr programs once, then restarts the running design each cycle by pulsing the UART's
+# DTR low (the Arty's ck_rst): core reset with the PHY held in reset, so rx_clk stops while
+# the MAC resets (fpga-coord 0005).
 set -euo pipefail
 out=$1 n=${2:-100} bit=${3:-build/rx_stats/rx_stats_top.bit}
 if_ip=${IF_IP:-192.168.10.1} tty=${TTY:-/dev/ttyUSB1}
@@ -31,8 +34,20 @@ rd=""
 trap '[ -n "$rd" ] && kill "$rd" 2>/dev/null; rm -rf "$tmp"' EXIT
 echo "cycle,fresh,mac_up_s,sent,send_retries,achieved_pps,uptime_s,eth_ok,crc_err,rx_err,ovf_lost,udp_ok,seq_err,seq_lost,fifo_hwm,pass" > "$out"
 fails=0
+dtr_pulse() {  # DTR low 50 ms, then high again
+  python3 -c 'import fcntl, struct, sys, termios, time
+f = open(sys.argv[1], "rb", buffering=0)
+b = struct.pack("I", termios.TIOCM_DTR)
+fcntl.ioctl(f, termios.TIOCMBIC, b); time.sleep(0.05); fcntl.ioctl(f, termios.TIOCMBIS, b)' "$tty"
+}
+if [ "$prog" = dtr ]; then  # load the design once; each cycle restarts it
+  "$ofl" -b arty_a7_100t "$bit" > "$tmp/prog0.txt" 2>&1 || { cat "$tmp/prog0.txt" >&2; exit 3; }
+  sleep 5
+fi
 for c in $(seq 1 "$n"); do
-  if [ "$prog" = vivado ]; then
+  if [ "$prog" = dtr ]; then
+    dtr_pulse > "$tmp/prog.txt" 2>&1
+  elif [ "$prog" = vivado ]; then
     vivado -mode batch -nojournal -nolog -source "$prog_tcl" -tclargs "$bit" > "$tmp/prog.txt" 2>&1
   else
     "$ofl" -b arty_a7_100t "$bit" > "$tmp/prog.txt" 2>&1
