@@ -3,7 +3,25 @@
 Releases are tagged only after their gate test passes (see `~/fpga-coord/dependencies.toml`).
 
 ## Unreleased
-- **fpga-coord 0005 fix (for `eth-core-v0.4`):** new `rtl/rx_reset_bridge.sv` inside
+
+## eth-core-v0.4 — 2026-11-14
+- Gate (`dependencies.toml`): fpga-coord 0005, `eth_rx` resets safe whatever rx_clk does
+  (simulation reproduction and fix in `make ci`); 100 reprogram-then-stream cycles on the
+  board with the FIFO level never above its depth.
+- Sim: `make ci` at `afa3bc0`: cocotb 51 passed, 0 failed, 2 skipped; formal PASS.
+  `tb/test_eth_rx_reset.py` reproduces the fault (RX_CLK stopped across a MAC reset:
+  `fifo_level_o` 3,193-3,262 on a 2,048 FIFO, old frames re-delivered) and passes with the
+  fix; `test_rx_stats mac_held_in_reset_while_link_down`.
+- Hardware: `rx_stats` at `94bcde0` (WNS +0.502 ns), `scripts/reprogram_cycles.sh`
+  (2,000 pps × 4,000 datagrams per cycle).
+- Result: PASS. 100/100 reprogram-then-stream cycles, FIFO high-water mark never above
+  1 byte, every datagram received; also 100/100 cycles restarting by UART DTR (core reset
+  with the PHY held, pointers not cleared). **Limit:** the fault was never seen on our
+  board, on the fix or on the v0.2 control, even with a build made to provoke it, so the
+  hardware runs show the fix does no harm, not that it cures the fault seen on P3's board.
+  Evidence: `data/results/2026-11-13_0005_reset_cycles.md`, CSVs and per-cycle logs
+  alongside.
+- **fpga-coord 0005 fix:** new `rtl/rx_reset_bridge.sv` inside
   `eth_rx`: the rx_clk-domain reset is made from `rst_i`, and the async FIFO's read side
   resets only while its write side is in reset, so a reset while RX_CLK is stopped no
   longer leaves the write pointer behind (that showed `fifo_level_o` above the depth and

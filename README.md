@@ -16,7 +16,8 @@ gate followed: 9,000,000 echoes of 1–1,472 B, every one intact, at 96.3 Mbit/s
 ([evidence](data/results/2026-11-05_v0.2_udp_echo_sustained.md)). Cut-through RX passed on
 2026-11-12: 4,879,984 of 4,880,000 delivered, 0 errors; the 16 others were dropped by the host's
 USB adapter before the wire ([evidence](data/results/2026-11-12_v0.3_rx_stats_ct_sustained.md)).
-Released: `eth-core-v0.1` (RX), `eth-core-v0.2` (TX) and `eth-core-v0.3` (cut-through RX).
+Released: `eth-core-v0.1` (RX), `eth-core-v0.2` (TX), `eth-core-v0.3` (cut-through RX) and
+`eth-core-v0.4` (resets safe whatever RX_CLK does, fpga-coord 0005).
 
 Every number below comes from a committed report in [`docs/reports/`](docs/reports/),
 produced by `make example` / `make example-echo`, or from a test run by `make ci`.
@@ -327,6 +328,7 @@ with a `key=value` summary for results files.
 | Sustained RX, zero drops | 4,880,000 sent, 4,880,000 delivered, `ovf_lost` 0 | 610 s, 1,472 B payloads, 8,000/s = 98.4 Mbit/s on the wire | [CSV](data/results/2026-11-05_v0.1_rx_stats_sustained.csv), [notes](data/results/2026-11-05_v0.1_rx_stats_sustained.md) |
 | RX FIFO high-water mark | 1 byte of 2,048 (core-side view, may read 2–3 low) | same run | same |
 | Sustained RX, cut-through | 4,880,000 sent, 4,879,984 delivered, every RX error counter 0, FIFO high-water 1 B; the 16 missing were TX drops in the host's USB adapter (counted there) | 610 s at 8,000/s, `rx_stats` with `CUT_THROUGH = 1` (WNS +0.592 ns) | [CSV](data/results/2026-11-12_v0.3_run2_rx_stats_ct_sustained.csv), [notes](data/results/2026-11-12_v0.3_rx_stats_ct_sustained.md) |
+| Reprogram-then-stream cycles (fpga-coord 0005) | 100/100 clean, FIFO high-water ≤ 1 B, every datagram received; the fault was not reproduced on this board (control clean too) | `rx_stats` at `94bcde0`, 2,000/s × 4,000 per cycle | [notes](data/results/2026-11-13_0005_reset_cycles.md) |
 | TX echo, 1–1,472 B | 9,000,000 sent, 9,000,000 intact, 0 lost; every length ≥ 5,782 times | 600 s, 15,000/s = 96.3 Mbit/s each way, full duplex | [CSV](data/results/2026-11-05_v0.2_udp_echo_sustained.csv), [notes](data/results/2026-11-05_v0.2_udp_echo_sustained.md) |
 
 ## Limitations
@@ -395,7 +397,9 @@ critical CDC violation exists.
   zero drops. Includes `mdio_link_mon`, not yet shown to fix fpga-coord 0005. Released
   2026-11-13 (16 host-side drops accounted for; see the CHANGELOG).
 - **`eth-core-v0.4`:** the fix for fpga-coord 0005 (`rx_reset_bridge`; reproduced and fixed in
-  simulation), released once a hardware test shows it.
+  simulation). Released 2026-11-14 after 100/100 reprogram-then-stream cycles on the board;
+  the fault itself never appeared on our board, so the cure is shown in simulation only
+  ([evidence](data/results/2026-11-13_0005_reset_cycles.md)).
 - After that: changes only through requests from consuming projects, each a new tag
   with a CHANGELOG note on what consumers must change.
 
